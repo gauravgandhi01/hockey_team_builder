@@ -624,6 +624,50 @@ def test_grade_endpoint_returns_record_projection(tmp_path: Path):
     ]
 
 
+def test_best_lineup_endpoint_returns_optimal_lineup_from_offered_boards(tmp_path: Path):
+    transport = MockHistoricalApi()
+    with create_test_client(tmp_path / "cache.sqlite3", transport) as client:
+        response = client.post(
+            "/api/game/best-lineup",
+            json={
+                "lineup": [
+                    {"slot": "C", "candidateKey": "WSH:2000s:104:C"},
+                    {"slot": "W", "candidateKey": "WSH:2000s:100:W"},
+                    {"slot": "W", "candidateKey": "WSH:2000s:102:W"},
+                    {"slot": "D", "candidateKey": "WSH:2000s:103:D"},
+                    {"slot": "D", "candidateKey": "COL:1990s:313:D"},
+                    {"slot": "G", "candidateKey": "COL:1990s:314:G"},
+                ],
+                "boards": [
+                    {"pairKey": "WSH:2000s", "candidateKeys": ["WSH:2000s:101:C", "WSH:2000s:104:C"]},
+                    {"pairKey": "WSH:2000s", "candidateKeys": ["WSH:2000s:100:W", "WSH:2000s:102:W"]},
+                    {"pairKey": "WSH:2000s", "candidateKeys": ["WSH:2000s:100:W", "WSH:2000s:102:W"]},
+                    {"pairKey": "WSH:2000s", "candidateKeys": ["WSH:2000s:103:D"]},
+                    {"pairKey": "COL:1990s", "candidateKeys": ["COL:1990s:313:D"]},
+                    {"pairKey": "COL:1990s", "candidateKeys": ["COL:1990s:314:G"]},
+                ],
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["totalScore"] > body["currentTotalScore"]
+    assert body["scoreDelta"] > 0
+    assert len(body["lineupBreakdown"]) == 6
+    assert len({row["playerId"] for row in body["lineupBreakdown"]}) == 6
+
+    center_row = next(item for item in body["lineupBreakdown"] if item["slot"] == "C")
+    assert center_row["candidateKey"] == "WSH:2000s:101:C"
+    assert center_row["sourceDrawIndex"] == 1
+
+    winger_rows = [item for item in body["lineupBreakdown"] if item["slot"] == "W"]
+    assert {row["candidateKey"] for row in winger_rows} == {
+        "WSH:2000s:100:W",
+        "WSH:2000s:102:W",
+    }
+    assert {row["sourceDrawIndex"] for row in winger_rows} == {2, 3}
+
+
 def test_grade_endpoint_rejects_duplicate_players(tmp_path: Path):
     transport = MockHistoricalApi()
     with create_test_client(tmp_path / "cache.sqlite3", transport) as client:

@@ -11,7 +11,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app.models import DrawRequest, GradeRequest
+from app.models import BestLineupRequest, DrawRequest, GradeRequest
 from app.nhl_service import NhlApiService
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -112,6 +112,10 @@ def create_app(service: NhlApiService | None = None, start_background_prewarm: b
     @app.post("/api/game/grade")
     async def game_grade(payload: GradeRequest, nhl_service: NhlApiService = Depends(get_service)):
         return await nhl_service.grade_lineup(payload.lineup)
+
+    @app.post("/api/game/best-lineup")
+    async def game_best_lineup(payload: BestLineupRequest, nhl_service: NhlApiService = Depends(get_service)):
+        return await nhl_service.best_lineup_from_boards(payload.lineup, payload.boards)
 
     return app
 

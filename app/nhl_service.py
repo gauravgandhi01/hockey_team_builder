@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import random
 from collections import defaultdict
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -899,11 +900,11 @@ class NhlApiService:
 
         raise HTTPException(status_code=503, detail="No eligible candidates available for the remaining lineup slots.")
 
-    async def grade_lineup(self, lineup: list[Any]) -> dict[str, Any]:
-        if len(lineup) != len(SLOT_SEQUENCE):
+    async def _score_lineup_selections(self, selections: list[dict[str, Any]]) -> dict[str, Any]:
+        if len(selections) != len(SLOT_SEQUENCE):
             raise HTTPException(status_code=400, detail=f"Lineup must contain exactly {len(SLOT_SEQUENCE)} selections.")
 
-        ordered_slots = [item.slot for item in lineup]
+        ordered_slots = [selection["slot"] for selection in selections]
         if ordered_slots != SLOT_SEQUENCE:
             raise HTTPException(status_code=400, detail="Lineup slots must follow C, W, W, D, D, G order.")
 
@@ -911,19 +912,21 @@ class NhlApiService:
         seen_candidate_keys: set[str] = set()
         breakdown: list[dict[str, Any]] = []
 
-        for item in lineup:
-            if item.candidateKey in seen_candidate_keys:
+        for selection in selections:
+            slot = selection["slot"]
+            candidate_key = selection["candidateKey"]
+            if candidate_key in seen_candidate_keys:
                 raise HTTPException(status_code=400, detail="Each player may only be selected once.")
-            seen_candidate_keys.add(item.candidateKey)
+            seen_candidate_keys.add(candidate_key)
 
-            parsed = parse_candidate_key(item.candidateKey)
+            parsed = parse_candidate_key(candidate_key)
             if parsed is None:
-                raise HTTPException(status_code=400, detail=f"Invalid candidate key: {item.candidateKey}.")
+                raise HTTPException(status_code=400, detail=f"Invalid candidate key: {candidate_key}.")
             pair_key, player_id, slot_from_key = parsed
-            if item.slot != slot_from_key:
+            if slot != slot_from_key:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Candidate {item.candidateKey} is not eligible for slot {item.slot}.",
+                    detail=f"Candidate {candidate_key} is not eligible for slot {slot}.",
                 )
             if player_id in seen_player_ids:
                 raise HTTPException(status_code=400, detail="Each player may only be selected once.")
@@ -934,43 +937,45 @@ class NhlApiService:
                 raise HTTPException(status_code=400, detail=f"Unknown draw pair {pair_key}.")
             pool = await self.get_team_decade_pool(pair_key)
             candidate = next(
-                (entry for entry in pool["candidates"] if entry["candidateKey"] == item.candidateKey),
+                (entry for entry in pool["candidates"] if entry["candidateKey"] == candidate_key),
                 None,
             )
             if candidate is None:
-                raise HTTPException(status_code=400, detail=f"Candidate {item.candidateKey} is no longer valid.")
+                raise HTTPException(status_code=400, detail=f"Candidate {candidate_key} is no longer valid.")
 
-            leaderboard = await self.get_decade_role_leaderboard(pair["decadeStart"], item.slot)
-            scored = leaderboard.get(item.candidateKey)
+            leaderboard = await self.get_decade_role_leaderboard(pair["decadeStart"], slot)
+            scored = leaderboard.get(candidate_key)
             if scored is None:
                 raise HTTPException(status_code=503, detail="Unable to score selected player.")
 
-            breakdown.append(
-                {
-                    "slot": item.slot,
-                    "slotLabel": SLOT_LABELS[item.slot],
-                    "candidateKey": item.candidateKey,
-                    "playerId": player_id,
-                    "fullName": candidate["fullName"],
-                    "teamAbbrev": pair["historicalTeam"]["abbrev"],
-                    "teamName": pair["historicalTeam"]["name"],
-                    "modernFranchiseAbbrev": pair["modernFranchise"]["abbrev"],
-                    "decade": pair["decadeLabel"],
-                    "positionCode": candidate["positionCode"],
-                    "headshot": candidate["headshot"],
-                    "awards": candidate.get("awards", []),
-                    "score": scored["score"],
-                    "rawScore": scored["rawScore"],
-                    "totalsScore": scored["totalsScore"],
-                    "rateScore": scored["rateScore"],
-                    "metricPercentiles": {
-                        "totals": scored["totalsPercentiles"],
-                        "rates": scored["ratePercentiles"],
-                    },
-                    "stats": decade_offer_stats(candidate),
-                    "scorecardTotals": scorecard_totals(candidate),
-                }
-            )
+            row = {
+                "slot": slot,
+                "slotLabel": SLOT_LABELS[slot],
+                "candidateKey": candidate_key,
+                "playerId": player_id,
+                "fullName": candidate["fullName"],
+                "teamAbbrev": pair["historicalTeam"]["abbrev"],
+                "teamName": pair["historicalTeam"]["name"],
+                "modernFranchiseAbbrev": pair["modernFranchise"]["abbrev"],
+                "decade": pair["decadeLabel"],
+                "positionCode": candidate["positionCode"],
+                "headshot": candidate["headshot"],
+                "awards": candidate.get("awards", []),
+                "score": scored["score"],
+                "rawScore": scored["rawScore"],
+                "totalsScore": scored["totalsScore"],
+                "rateScore": scored["rateScore"],
+                "metricPercentiles": {
+                    "totals": scored["totalsPercentiles"],
+                    "rates": scored["ratePercentiles"],
+                },
+                "stats": decade_offer_stats(candidate),
+                "scorecardTotals": scorecard_totals(candidate),
+            }
+            source_draw_index = selection.get("sourceDrawIndex")
+            if source_draw_index is not None:
+                row["sourceDrawIndex"] = source_draw_index
+            breakdown.append(row)
 
         total_score = round(sum(player["score"] for player in breakdown) / len(breakdown), 1)
         return {
@@ -979,6 +984,204 @@ class NhlApiService:
             "letterGrade": map_letter_grade(total_score),
             "projectedRecord": project_record(total_score),
         }
+
+    async def grade_lineup(self, lineup: list[Any]) -> dict[str, Any]:
+        return await self._score_lineup_selections(
+            [{"slot": item.slot, "candidateKey": item.candidateKey} for item in lineup]
+        )
+
+    async def _board_candidates_for_best_lineup(self, board: Any) -> list[dict[str, Any]]:
+        pair = await self.get_draw_pair(board.pairKey)
+        if pair is None:
+            raise HTTPException(status_code=400, detail=f"Unknown draw pair {board.pairKey}.")
+
+        pool = await self.get_team_decade_pool(board.pairKey)
+        candidates_by_key = {candidate["candidateKey"]: candidate for candidate in pool["candidates"]}
+        role_leaderboards: dict[str, dict[str, dict[str, Any]]] = {}
+        resolved: list[dict[str, Any]] = []
+        seen_candidate_keys: set[str] = set()
+
+        for candidate_key in board.candidateKeys:
+            if candidate_key in seen_candidate_keys:
+                continue
+            seen_candidate_keys.add(candidate_key)
+            parsed = parse_candidate_key(candidate_key)
+            if parsed is None:
+                raise HTTPException(status_code=400, detail=f"Invalid candidate key: {candidate_key}.")
+            pair_key, _, slot = parsed
+            if pair_key != board.pairKey:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Candidate {candidate_key} does not belong to draw pair {board.pairKey}.",
+                )
+            candidate = candidates_by_key.get(candidate_key)
+            if candidate is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Candidate {candidate_key} is not valid for draw pair {board.pairKey}.",
+                )
+            leaderboard = role_leaderboards.get(slot)
+            if leaderboard is None:
+                leaderboard = await self.get_decade_role_leaderboard(pair["decadeStart"], slot)
+                role_leaderboards[slot] = leaderboard
+            scored = leaderboard.get(candidate_key)
+            if scored is None:
+                raise HTTPException(status_code=503, detail=f"Unable to score candidate {candidate_key}.")
+            resolved.append(
+                {
+                    "candidateKey": candidate_key,
+                    "playerId": candidate["playerId"],
+                    "eligibleSlot": candidate["eligibleSlot"],
+                    "score": scored["score"],
+                }
+            )
+
+        if not resolved:
+            raise HTTPException(status_code=400, detail=f"Draw board {board.pairKey} has no valid candidates.")
+        return resolved
+
+    def _best_lineup_for_board_candidates(self, boards: list[list[dict[str, Any]]]) -> list[dict[str, Any]] | None:
+        remaining_target = {
+            "C": SLOT_SEQUENCE.count("C"),
+            "W": SLOT_SEQUENCE.count("W"),
+            "D": SLOT_SEQUENCE.count("D"),
+            "G": SLOT_SEQUENCE.count("G"),
+        }
+        available_slots_by_board = [
+            sorted(
+                {candidate["eligibleSlot"] for candidate in board},
+                key=lambda slot: SLOT_SORT_ORDER[slot],
+            )
+            for board in boards
+        ]
+
+        assignments: list[tuple[str, ...]] = []
+
+        def enumerate_assignments(board_index: int, current: list[str]) -> None:
+            if board_index == len(boards):
+                if all(count == 0 for count in remaining_target.values()):
+                    assignments.append(tuple(current))
+                return
+            for slot in available_slots_by_board[board_index]:
+                if remaining_target[slot] <= 0:
+                    continue
+                remaining_target[slot] -= 1
+                current.append(slot)
+                enumerate_assignments(board_index + 1, current)
+                current.pop()
+                remaining_target[slot] += 1
+
+        enumerate_assignments(0, [])
+        if not assignments:
+            return None
+
+        best_total = -1
+        best_choices: list[dict[str, Any]] | None = None
+
+        for assignment in assignments:
+            player_options: dict[int, list[tuple[int, dict[str, Any]]]] = defaultdict(list)
+            for board_index, slot in enumerate(assignment):
+                for candidate in boards[board_index]:
+                    if candidate["eligibleSlot"] != slot:
+                        continue
+                    player_options[candidate["playerId"]].append((board_index, candidate))
+
+            players = list(player_options.items())
+            full_mask = (1 << len(boards)) - 1
+            impossible = -10**9
+
+            @lru_cache(maxsize=None)
+            def solve(player_index: int, filled_mask: int) -> int:
+                if filled_mask == full_mask:
+                    return 0
+                if player_index == len(players):
+                    return impossible
+
+                best_here = solve(player_index + 1, filled_mask)
+                for board_index, candidate in players[player_index][1]:
+                    if filled_mask & (1 << board_index):
+                        continue
+                    downstream = solve(player_index + 1, filled_mask | (1 << board_index))
+                    if downstream == impossible:
+                        continue
+                    candidate_score = int(round(candidate["score"] * 10))
+                    best_here = max(best_here, candidate_score + downstream)
+                return best_here
+
+            assignment_total = solve(0, 0)
+            if assignment_total == impossible or assignment_total < best_total:
+                continue
+
+            selected_by_board: dict[int, dict[str, Any]] = {}
+
+            def rebuild(player_index: int, filled_mask: int) -> None:
+                if filled_mask == full_mask or player_index == len(players):
+                    return
+                best_here = solve(player_index, filled_mask)
+                if solve(player_index + 1, filled_mask) == best_here:
+                    rebuild(player_index + 1, filled_mask)
+                    return
+                for board_index, candidate in players[player_index][1]:
+                    if filled_mask & (1 << board_index):
+                        continue
+                    downstream = solve(player_index + 1, filled_mask | (1 << board_index))
+                    if downstream == impossible:
+                        continue
+                    candidate_score = int(round(candidate["score"] * 10))
+                    if candidate_score + downstream == best_here:
+                        selected_by_board[board_index] = candidate
+                        rebuild(player_index + 1, filled_mask | (1 << board_index))
+                        return
+
+            rebuild(0, 0)
+            if len(selected_by_board) != len(boards):
+                continue
+
+            ordered_selections: list[dict[str, Any]] = []
+            chosen_by_slot: dict[str, list[tuple[int, dict[str, Any]]]] = defaultdict(list)
+            for board_index, candidate in selected_by_board.items():
+                chosen_by_slot[assignment[board_index]].append((board_index, candidate))
+            for slot in chosen_by_slot:
+                chosen_by_slot[slot].sort(key=lambda entry: entry[0])
+
+            slot_offsets = defaultdict(int)
+            for slot in SLOT_SEQUENCE:
+                board_index, candidate = chosen_by_slot[slot][slot_offsets[slot]]
+                slot_offsets[slot] += 1
+                ordered_selections.append(
+                    {
+                        "slot": slot,
+                        "candidateKey": candidate["candidateKey"],
+                        "sourceDrawIndex": board_index + 1,
+                    }
+                )
+
+            best_total = assignment_total
+            best_choices = ordered_selections
+
+        return best_choices
+
+    async def best_lineup_from_boards(self, lineup: list[Any], boards: list[Any]) -> dict[str, Any]:
+        current_result = await self.grade_lineup(lineup)
+        if len(boards) != len(SLOT_SEQUENCE):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Exactly {len(SLOT_SEQUENCE)} draw boards are required to compute the best lineup.",
+            )
+
+        board_candidates = [await self._board_candidates_for_best_lineup(board) for board in boards]
+        best_selections = self._best_lineup_for_board_candidates(board_candidates)
+        if best_selections is None:
+            raise HTTPException(status_code=400, detail="Unable to derive a valid best lineup from the provided boards.")
+
+        best_result = await self._score_lineup_selections(best_selections)
+        for best_row, selection in zip(best_result["lineupBreakdown"], best_selections):
+            best_row["sourceDrawIndex"] = selection["sourceDrawIndex"]
+
+        best_result["currentTotalScore"] = current_result["totalScore"]
+        best_result["currentLetterGrade"] = current_result["letterGrade"]
+        best_result["scoreDelta"] = round(best_result["totalScore"] - current_result["totalScore"], 1)
+        return best_result
 
     async def prewarm_missing(self) -> None:
         await self.initialize()

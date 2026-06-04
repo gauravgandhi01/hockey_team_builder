@@ -1113,6 +1113,155 @@ button {
   font-size: 0.78rem;
 }
 
+.best-possible-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.best-possible-button {
+  padding-inline: 12px;
+}
+
+.best-possible-error {
+  margin: 0;
+  color: var(--coral);
+  font-size: 0.72rem;
+}
+
+.best-possible-card {
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(157, 177, 193, 0.1);
+  background: rgba(15, 30, 40, 0.92);
+}
+
+.best-possible-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.best-possible-header h3 {
+  margin: 4px 0 2px;
+  font-size: 1rem;
+  color: var(--ink);
+}
+
+.best-possible-subtitle {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+}
+
+.best-possible-score-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.best-possible-grade {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(82, 198, 200, 0.12);
+  border: 1px solid rgba(82, 198, 200, 0.16);
+  color: var(--ink);
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 0.94rem;
+  line-height: 1;
+}
+
+.best-possible-score {
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 1.8rem;
+  line-height: 0.92;
+  color: var(--ink);
+}
+
+.best-possible-list {
+  display: grid;
+  gap: 6px;
+}
+
+.best-possible-row {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(17, 33, 45, 0.9);
+  border: 1px solid rgba(157, 177, 193, 0.08);
+}
+
+.best-possible-headshot {
+  width: 30px;
+  height: 30px;
+  object-fit: cover;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.best-possible-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.best-possible-copy strong {
+  font-size: 0.82rem;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.best-possible-meta {
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.best-possible-stats,
+.best-possible-awards {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.best-possible-stats span {
+  padding: 3px 5px;
+  border-radius: 999px;
+  background: rgba(82, 198, 200, 0.08);
+  border: 1px solid rgba(157, 177, 193, 0.08);
+  color: var(--ink-soft);
+  font-size: 0.6rem;
+  line-height: 1;
+}
+
+.best-possible-awards .award-chip {
+  min-height: 18px;
+  padding: 2px 6px;
+  font-size: 0.56rem;
+}
+
+.best-possible-player-score {
+  color: var(--teal);
+  font-weight: 700;
+  font-size: 0.76rem;
+}
+
 @keyframes rise {
   from {
     opacity: 0;
@@ -1547,5 +1696,69 @@ button {
 
   .share-slot-score {
     font-size: 0.7rem;
+  }
+
+  .best-possible-card {
+    padding: 10px;
+    border-radius: 12px;
+  }
+
+  .best-possible-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    margin-bottom: 7px;
+  }
+
+  .best-possible-header h3 {
+    font-size: 0.92rem;
+  }
+
+  .best-possible-subtitle {
+    font-size: 0.68rem;
+  }
+
+  .best-possible-grade {
+    min-width: 36px;
+    font-size: 0.84rem;
+  }
+
+  .best-possible-score {
+    font-size: 1.55rem;
+  }
+
+  .best-possible-row {
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    gap: 6px;
+    padding: 7px;
+  }
+
+  .best-possible-headshot {
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+  }
+
+  .best-possible-copy strong {
+    font-size: 0.74rem;
+  }
+
+  .best-possible-meta {
+    font-size: 0.6rem;
+  }
+
+  .best-possible-stats span {
+    padding: 2px 4px;
+    font-size: 0.54rem;
+  }
+
+  .best-possible-awards .award-chip {
+    min-height: 16px;
+    padding: 2px 5px;
+    font-size: 0.52rem;
+  }
+
+  .best-possible-player-score {
+    font-size: 0.68rem;
   }
 }

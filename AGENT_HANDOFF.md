@@ -11,7 +11,7 @@ This is no longer the original current-roster prototype. The shipped product is 
 - branded as `linecraft`
 
 As of the latest verification:
-- tests: `35 passed`
+- tests: `36 passed`
 - runtime entrypoint: `uvicorn app.main:app --reload`
 - local cache DB: `storage/historical_cache.sqlite3`
 
@@ -235,7 +235,7 @@ pytest -q
 ```
 
 Current baseline:
-- `35 passed`
+- `36 passed`
 
 ## HTTP API
 
@@ -316,6 +316,43 @@ Important nuance:
 - `projectedRecord` is still returned by the API
 - the UI no longer displays projected record
 
+
+### `POST /api/game/best-lineup`
+Request body:
+```json
+{
+  "lineup": [
+    {"slot": "C", "candidateKey": "..."},
+    {"slot": "W", "candidateKey": "..."},
+    {"slot": "W", "candidateKey": "..."},
+    {"slot": "D", "candidateKey": "..."},
+    {"slot": "D", "candidateKey": "..."},
+    {"slot": "G", "candidateKey": "..."}
+  ],
+  "boards": [
+    {"pairKey": "WSH:2000s", "candidateKeys": ["..."]}
+  ]
+}
+```
+
+Behavior:
+- uses only the six accepted draw boards from the run
+- chooses exactly one candidate from each board
+- enforces the normal slot counts `C, W, W, D, D, G`
+- enforces no duplicate `playerId` values across boards
+- maximizes the hidden final displayed `score`, not `rawScore`
+
+Response includes:
+- `lineupBreakdown`
+- `totalScore`
+- `letterGrade`
+- `projectedRecord`
+- `currentTotalScore`
+- `currentLetterGrade`
+- `scoreDelta`
+
+Each best-lineup breakdown row also includes `sourceDrawIndex` so the frontend can show which original draw board the optimal candidate came from.
+
 ## Backend Architecture
 
 ### `app/main.py`
@@ -325,7 +362,7 @@ Responsibilities:
 - manages the shared `httpx.AsyncClient`
 - mounts `/static`
 - serves `/`
-- exposes `/api/game/draw` and `/api/game/grade`
+- exposes `/api/game/draw`, `/api/game/grade`, and `/api/game/best-lineup`
 - exposes a hidden admin dashboard route guarded by an environment key
 - optionally starts background prewarm on startup
 
@@ -648,9 +685,13 @@ All frontend behavior lives in `app/static/app.js`.
 ### State Model
 Important client state includes:
 - `lineup`
+- `acceptedBoards`
 - `currentIndex`
 - `currentDraw`
 - `result`
+- `bestPossible`
+- `bestPossibleVisible`
+- `bestPossibleLoading`
 - `loadingKind`
 - `error`
 - `shuffleFrame`
@@ -667,6 +708,7 @@ Important client state includes:
 - position filter chips (`All`, `C`, `W`, `D`, `G`) are client-side only
 - candidate filtering resets to `ALL` after every new draw or reroll
 - result rendering is now share-card-first
+- post-run results can reveal the exact best possible lineup from the six accepted draw boards
 - hard mode is selected before the first draw and locks for the rest of the run
 
 ### Candidate Card UX
@@ -742,6 +784,7 @@ Covers:
 - draw candidate payloads including `ratingTier`
 - hidden admin dashboard access
 - Cup-badge team-stint matching
+- best-lineup optimization from accepted boards
 
 ### `tests/test_scoring.py`
 Covers:

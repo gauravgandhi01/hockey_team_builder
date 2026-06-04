@@ -25,3 +25,13 @@ class LineupItem(BaseModel):
 
 class GradeRequest(BaseModel):
     lineup: list[LineupItem]
+
+
+class BestLineupBoard(BaseModel):
+    pairKey: str
+    candidateKeys: list[str] = Field(min_length=1)
+
+
+class BestLineupRequest(BaseModel):
+    lineup: list[LineupItem]
+    boards: list[BestLineupBoard] = Field(min_length=1)

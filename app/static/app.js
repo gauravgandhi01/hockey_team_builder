@@ -52,9 +52,14 @@ const SHUFFLE_TEAMS = [
 
 const state = {
   lineup: [],
+  acceptedBoards: [],
   currentIndex: 0,
   currentDraw: null,
   result: null,
+  bestPossible: null,
+  bestPossibleVisible: false,
+  bestPossibleLoading: false,
+  bestPossibleError: null,
   loadingKind: null,
   error: null,
   shuffleFrame: null,
@@ -230,9 +235,14 @@ function startShuffleAnimation() {
 
 async function startNewRun() {
   initializeLineup();
+  state.acceptedBoards = [];
   state.currentIndex = 0;
   state.currentDraw = null;
   state.result = null;
+  state.bestPossible = null;
+  state.bestPossibleVisible = false;
+  state.bestPossibleLoading = false;
+  state.bestPossibleError = null;
   state.loadingKind = null;
   state.error = null;
   state.shuffleFrame = null;
@@ -364,6 +374,11 @@ async function chooseCandidate(candidate) {
     positionCode: candidate.positionCode,
   };
 
+  state.acceptedBoards.push({
+    pairKey: state.currentDraw.pairKey,
+    candidateKeys: state.currentDraw.candidates.map((entry) => entry.candidateKey),
+  });
+
   state.currentDraw = null;
   state.error = null;
   state.currentIndex += 1;
@@ -395,6 +410,38 @@ async function gradeLineup() {
   } finally {
     state.loadingKind = null;
     render();
+  }
+}
+
+async function toggleBestPossible() {
+  if (!state.result || state.bestPossibleLoading) {
+    return;
+  }
+
+  if (state.bestPossible) {
+    state.bestPossibleVisible = !state.bestPossibleVisible;
+    renderResults();
+    return;
+  }
+
+  state.bestPossibleLoading = true;
+  state.bestPossibleError = null;
+  renderResults();
+
+  try {
+    state.bestPossible = await apiPost("/api/game/best-lineup", {
+      lineup: state.lineup.map((entry) => ({
+        slot: entry.slot,
+        candidateKey: entry.pick.candidateKey,
+      })),
+      boards: state.acceptedBoards,
+    });
+    state.bestPossibleVisible = true;
+  } catch (error) {
+    state.bestPossibleError = error.message;
+  } finally {
+    state.bestPossibleLoading = false;
+    renderResults();
   }
 }
 
@@ -879,13 +926,88 @@ function shareCardMarkup() {
   `;
 }
 
+function bestPossibleControlsMarkup() {
+  if (!state.result) {
+    return "";
+  }
+
+  const buttonLabel = state.bestPossibleLoading
+    ? "Calculating best lineup..."
+    : state.bestPossibleVisible
+      ? "Hide Best Possible Lineup"
+      : "Show Best Possible Lineup";
+
+  return `
+    <div class="best-possible-controls">
+      <button
+        id="best-possible-button"
+        class="ghost-button best-possible-button"
+        type="button"
+        ${state.bestPossibleLoading ? "disabled" : ""}
+      >${buttonLabel}</button>
+      ${state.bestPossibleError ? `<p class="best-possible-error">${state.bestPossibleError}</p>` : ""}
+    </div>
+  `;
+}
+
+function bestPossibleMarkup() {
+  if (!state.bestPossibleVisible || !state.bestPossible) {
+    return "";
+  }
+
+  const delta = Number(state.bestPossible.scoreDelta || 0);
+  const deltaLabel = delta > 0 ? `+${delta.toFixed(1)} vs your run` : "You found the top lineup";
+
+  return `
+    <section class="best-possible-card compact-card">
+      <div class="best-possible-header">
+        <div>
+          <p class="panel-kicker">Best Possible</p>
+          <h3>Best lineup from your six draws</h3>
+          <p class="best-possible-subtitle">${deltaLabel}</p>
+        </div>
+        <div class="best-possible-score-block">
+          <span class="best-possible-grade">${state.bestPossible.letterGrade}</span>
+          <span class="best-possible-score">${state.bestPossible.totalScore}</span>
+        </div>
+      </div>
+      <div class="best-possible-list">
+        ${state.bestPossible.lineupBreakdown.map((entry) => `
+          <article class="best-possible-row ${positionToneClass(entry.slot)}">
+            <span class="share-slot-pill ${positionToneClass(entry.slot)}">${entry.slot}</span>
+            <img class="best-possible-headshot" src="${entry.headshot}" alt="${entry.fullName}">
+            <div class="best-possible-copy">
+              <strong>${entry.fullName}</strong>
+              <span class="best-possible-meta">${entry.teamAbbrev} · ${entry.decade} · Draw ${entry.sourceDrawIndex}</span>
+              <div class="best-possible-stats">${statSummaryMarkup(entry.stats)}</div>
+              ${awardChipsMarkup(entry.awards, "best-possible-awards")}
+            </div>
+            <span class="best-possible-player-score">${entry.score}</span>
+          </article>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
 function renderResults() {
   if (!state.result) {
     resultPanel.innerHTML = "";
     return;
   }
 
-  resultPanel.innerHTML = shareCardMarkup();
+  resultPanel.innerHTML = `
+    ${shareCardMarkup()}
+    ${bestPossibleControlsMarkup()}
+    ${bestPossibleMarkup()}
+  `;
+
+  const bestPossibleButton = document.getElementById("best-possible-button");
+  if (bestPossibleButton) {
+    bestPossibleButton.addEventListener("click", async () => {
+      await toggleBestPossible();
+    });
+  }
 }
 
 function render() {
