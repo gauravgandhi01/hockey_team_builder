@@ -561,7 +561,6 @@ function statLabelForKey(key) {
     points: "P",
     assists: "A",
     goals: "G",
-    shots: "SOG",
     avgTimeOnIcePerGame: "TOI",
     wins: "W",
     shutouts: "SO",

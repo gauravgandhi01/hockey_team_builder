@@ -117,19 +117,16 @@ def decade_offer_stats(candidate: dict[str, Any]) -> dict[str, Any]:
             "points": stats.get("points", 0),
             "assists": stats.get("assists", 0),
             "goals": stats.get("goals", 0),
-            "shots": stats.get("shots", 0),
         }
     if slot == "W":
         return {
             "points": stats.get("points", 0),
             "goals": stats.get("goals", 0),
-            "shots": stats.get("shots", 0),
         }
     if slot == "D":
         offer = {
             "points": stats.get("points", 0),
             "assists": stats.get("assists", 0),
-            "shots": stats.get("shots", 0),
         }
         if stats.get("avgTimeOnIcePerGame") is not None:
             offer["avgTimeOnIcePerGame"] = stats.get("avgTimeOnIcePerGame")

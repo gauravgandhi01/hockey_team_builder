@@ -358,7 +358,7 @@ def test_draw_endpoint_returns_wsh_2000s_candidates_sorted_by_games_played(tmp_p
     assert all("previewScore" not in entry for entry in body["candidates"])
     assert all("ratingTier" in entry for entry in body["candidates"])
     candidate = next(entry for entry in body["candidates"] if entry["playerId"] == 100)
-    assert candidate["offerStats"] == {"points": 219, "goals": 106, "shots": 896}
+    assert candidate["offerStats"] == {"points": 219, "goals": 106}
     assert candidate["ratingTier"] == 1
     assert candidate["awards"] == [
         {"key": "mvp", "label": "MVP", "level": "winner", "count": 2},

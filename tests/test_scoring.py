@@ -142,7 +142,6 @@ def test_defense_offer_stats_omit_toi_when_untracked():
     ) == {
         "points": 100,
         "assists": 80,
-        "shots": 250,
     }
 
 
