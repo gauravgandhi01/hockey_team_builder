@@ -443,6 +443,8 @@ def test_grade_endpoint_returns_record_projection(tmp_path: Path):
     assert body["letterGrade"]
     assert body["projectedRecord"]["display"].count("-") == 2
     assert len(body["lineupBreakdown"]) == 6
+    winger_row = next(item for item in body["lineupBreakdown"] if item["candidateKey"] == "WSH:2000s:100:W")
+    assert winger_row["scorecardTotals"] == {"points": 219, "goals": 106, "assists": 113}
     goalie_row = next(item for item in body["lineupBreakdown"] if item["slot"] == "G")
     assert goalie_row["teamAbbrev"] == "WSH"
     assert goalie_row["stats"] == {
@@ -451,6 +453,7 @@ def test_grade_endpoint_returns_record_projection(tmp_path: Path):
         "goalsAgainstAverage": goalie_row["stats"]["goalsAgainstAverage"],
         "savePercentage": goalie_row["stats"]["savePercentage"],
     }
+    assert goalie_row["scorecardTotals"] == {"points": 0, "goals": 0, "assists": 0}
 
 
 def test_grade_endpoint_rejects_duplicate_players(tmp_path: Path):

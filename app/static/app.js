@@ -60,12 +60,14 @@ const state = {
   shuffleFrame: null,
   rerollTeamUsed: false,
   rerollDecadeUsed: false,
+  candidateFilter: "ALL",
 };
 
 const lineupBoard = document.getElementById("lineup-board");
 const promptTitle = document.getElementById("prompt-title");
 const turnIndicator = document.getElementById("turn-indicator");
 const teamRoll = document.getElementById("team-roll");
+const candidateFilters = document.getElementById("candidate-filters");
 const candidateGrid = document.getElementById("candidate-grid");
 const resultPanel = document.getElementById("result-panel");
 const statusBanner = document.getElementById("status-banner");
@@ -76,26 +78,6 @@ const drawButton =
 const rerollTeamButton = document.getElementById("reroll-team-button");
 const rerollDecadeButton = document.getElementById("reroll-decade-button");
 
-
-function wrapCanvasText(context, text, x, y, maxWidth, lineHeight) {
-  const words = text.split(/\s+/);
-  let line = "";
-  let currentY = y;
-  for (const word of words) {
-    const nextLine = line ? `${line} ${word}` : word;
-    if (context.measureText(nextLine).width > maxWidth && line) {
-      context.fillText(line, x, currentY);
-      line = word;
-      currentY += lineHeight;
-    } else {
-      line = nextLine;
-    }
-  }
-  if (line) {
-    context.fillText(line, x, currentY);
-  }
-  return currentY;
-}
 
 newRunButton.addEventListener("click", () => {
   startNewRun();
@@ -204,6 +186,7 @@ async function startNewRun() {
   state.shuffleFrame = null;
   state.rerollTeamUsed = false;
   state.rerollDecadeUsed = false;
+  state.candidateFilter = "ALL";
   render();
 }
 
@@ -232,6 +215,7 @@ async function requestDraw({ lockFranchiseAbbrev = null, lockDecade = null, excl
       delay(1100),
     ]);
     state.currentDraw = draw;
+    state.candidateFilter = "ALL";
     return true;
   } catch (error) {
     state.error = error.message;
@@ -378,9 +362,9 @@ function renderLineup() {
     .map((entry) => {
       if (!entry.pick) {
         return `
-          <article class="lineup-slot open">
+          <article class="lineup-slot open ${positionToneClass(entry.slot)}">
             <div class="slot-topline">
-              <span class="slot-badge">${entry.slot}</span>
+              <span class="slot-badge ${positionToneClass(entry.slot)}">${entry.slot}</span>
               <span class="slot-label">${SLOT_LABELS[entry.slot]}</span>
             </div>
             <p class="slot-empty">Open</p>
@@ -389,9 +373,9 @@ function renderLineup() {
       }
 
       return `
-        <article class="lineup-slot locked">
+        <article class="lineup-slot locked ${positionToneClass(entry.slot)}">
           <div class="slot-topline">
-            <span class="slot-badge">${entry.slot}</span>
+            <span class="slot-badge ${positionToneClass(entry.slot)}">${entry.slot}</span>
             <span class="slot-label">${SLOT_LABELS[entry.slot]}</span>
           </div>
           <div class="picked-player">
@@ -442,6 +426,64 @@ function candidateStatMarkup(candidate) {
     .join("");
 }
 
+function filteredCandidatesForCurrentDraw() {
+  if (!state.currentDraw) {
+    return [];
+  }
+  if (state.candidateFilter === "ALL") {
+    return state.currentDraw.candidates;
+  }
+  return state.currentDraw.candidates.filter(
+    (candidate) => candidate.eligibleSlot === state.candidateFilter,
+  );
+}
+
+function renderCandidateFilters() {
+  if (!candidateFilters) {
+    return;
+  }
+
+  if (!state.currentDraw || state.result || state.loadingKind === "grade") {
+    candidateFilters.innerHTML = "";
+    candidateFilters.hidden = true;
+    return;
+  }
+
+  const availableSlots = new Set(
+    state.currentDraw.candidates.map((candidate) => candidate.eligibleSlot),
+  );
+  const options = ["ALL", "C", "W", "D", "G"];
+
+  candidateFilters.hidden = false;
+  candidateFilters.innerHTML = options
+    .map((slot) => {
+      const isAll = slot === "ALL";
+      const enabled = isAll || availableSlots.has(slot);
+      const active = state.candidateFilter === slot;
+      const label = isAll ? "All" : slot;
+      return `
+        <button
+          class="filter-chip${active ? " active" : ""}"
+          type="button"
+          data-filter-slot="${slot}"
+          ${enabled ? "" : "disabled"}
+        >${label}</button>
+      `;
+    })
+    .join("");
+
+  candidateFilters.querySelectorAll(".filter-chip").forEach((button) => {
+    button.addEventListener("click", () => {
+      const nextFilter = button.dataset.filterSlot;
+      if (!nextFilter || nextFilter === state.candidateFilter) {
+        return;
+      }
+      state.candidateFilter = nextFilter;
+      renderPrompt();
+    });
+  });
+}
+
 function shuffleCardMarkup(frame) {
   return `
     <div class="team-card shuffling compact-card">
@@ -485,6 +527,7 @@ function renderPrompt() {
         <p class="team-subtitle">Lineup score ${state.result.totalScore}</p>
       </div>
     `;
+    renderCandidateFilters();
     candidateGrid.innerHTML = "";
     return;
   }
@@ -499,6 +542,7 @@ function renderPrompt() {
         <p class="team-subtitle">Comparing your ${SLOT_SEQUENCE.length} picks against the same-position players from each decade.</p>
       </div>
     `;
+    renderCandidateFilters();
     candidateGrid.innerHTML = "";
     return;
   }
@@ -513,6 +557,7 @@ function renderPrompt() {
         ? "Switching the decade"
         : "Shuffling team and decade";
     teamRoll.innerHTML = state.shuffleFrame ? shuffleCardMarkup(state.shuffleFrame) : "";
+    renderCandidateFilters();
     candidateGrid.innerHTML = "";
     return;
   }
@@ -520,21 +565,33 @@ function renderPrompt() {
   if (!state.currentDraw) {
     promptTitle.textContent = state.currentIndex === 0 ? "Draw your opening franchise and decade" : "Draw your next franchise and decade";
     teamRoll.innerHTML = "";
+    renderCandidateFilters();
     candidateGrid.innerHTML = "";
     return;
   }
 
   promptTitle.textContent = "Pick any eligible player";
   teamRoll.innerHTML = currentDrawMarkup(state.currentDraw);
+  renderCandidateFilters();
 
-  candidateGrid.innerHTML = state.currentDraw.candidates
+  const visibleCandidates = filteredCandidatesForCurrentDraw();
+  if (!visibleCandidates.length) {
+    candidateGrid.innerHTML = `
+      <div class="candidate-empty-state">
+        No ${SLOT_LABELS[state.candidateFilter] || state.candidateFilter} options available in this draw.
+      </div>
+    `;
+    return;
+  }
+
+  candidateGrid.innerHTML = visibleCandidates
     .map((candidate) => `
-      <button class="candidate-card" type="button" data-candidate-key="${candidate.candidateKey}">
+      <button class="candidate-card ${positionToneClass(candidate.eligibleSlot)}" type="button" data-candidate-key="${candidate.candidateKey}">
         <img src="${candidate.headshot}" alt="${candidate.fullName}">
         <div class="candidate-body">
           <div class="candidate-topline">
             <span class="candidate-team">${candidate.historicalTeamAbbrev}</span>
-            <span class="candidate-position">${candidate.positionCode}</span>
+            <span class="candidate-position ${positionToneClass(candidate.eligibleSlot)}">${candidate.positionCode}</span>
           </div>
           <h3>${candidate.fullName}</h3>
           <p class="candidate-meta">${candidate.historicalTeamName}</p>
@@ -572,6 +629,42 @@ function statSummaryMarkup(stats) {
     .join("");
 }
 
+function teamLogoUrl(teamAbbrev) {
+  return `https://assets.nhle.com/logos/nhl/svg/${teamAbbrev}_light.svg`;
+}
+
+function positionToneClass(slot) {
+  return `position-${String(slot || "").toLowerCase()}`;
+}
+
+function cumulativeLineupTotals(breakdown) {
+  return (breakdown || []).reduce(
+    (totals, entry) => {
+      const scorecardTotals = entry.scorecardTotals || {};
+      totals.points += Number(scorecardTotals.points || 0);
+      totals.goals += Number(scorecardTotals.goals || 0);
+      totals.assists += Number(scorecardTotals.assists || 0);
+      return totals;
+    },
+    { points: 0, goals: 0, assists: 0 },
+  );
+}
+
+function scorecardTotalsMarkup() {
+  if (!state.result) {
+    return "";
+  }
+
+  const totals = cumulativeLineupTotals(state.result.lineupBreakdown);
+  return `
+    <div class="scorecard-totals" aria-label="Cumulative lineup totals">
+      <span class="scorecard-total-chip">P ${totals.points}</span>
+      <span class="scorecard-total-chip">G ${totals.goals}</span>
+      <span class="scorecard-total-chip">A ${totals.assists}</span>
+    </div>
+  `;
+}
+
 function shareCardMarkup() {
   if (!state.result) {
     return "";
@@ -595,8 +688,12 @@ function shareCardMarkup() {
       </div>
       <div class="share-card-grid">
         ${breakdown.map((entry) => `
-          <article class="share-slot-row">
-            <span class="share-slot-pill">${entry.slot}</span>
+          <article class="share-slot-row ${positionToneClass(entry.slot)}">
+            <span class="share-slot-pill ${positionToneClass(entry.slot)}">${entry.slot}</span>
+            <div class="share-slot-media">
+              <img class="share-headshot" src="${entry.headshot}" alt="${entry.fullName}">
+              <img class="share-team-logo" src="${teamLogoUrl(entry.teamAbbrev)}" alt="${entry.teamAbbrev} logo">
+            </div>
             <div class="share-slot-copy">
               <strong>${entry.fullName}</strong>
               <span class="share-slot-meta">${entry.teamAbbrev} · ${entry.decade} · ${entry.positionCode}</span>
@@ -608,114 +705,6 @@ function shareCardMarkup() {
       </div>
     </section>
   `;
-}
-
-async function exportResultImage() {
-  if (!state.result) {
-    return;
-  }
-
-  try {
-    if (document.fonts && document.fonts.ready) {
-      await document.fonts.ready;
-    }
-
-    const breakdown = state.result.lineupBreakdown;
-    const width = 1200;
-    const rowHeight = 94;
-    const height = 260 + breakdown.length * rowHeight;
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const context = canvas.getContext("2d");
-    if (!context) {
-      throw new Error("Canvas rendering unavailable.");
-    }
-
-    const background = context.createLinearGradient(0, 0, width, height);
-    background.addColorStop(0, "#11273a");
-    background.addColorStop(1, "#0c6e74");
-    context.fillStyle = background;
-    context.fillRect(0, 0, width, height);
-
-    context.fillStyle = "rgba(255, 255, 255, 0.08)";
-    context.fillRect(46, 46, width - 92, height - 92);
-    context.fillStyle = "rgba(255, 255, 255, 0.04)";
-    context.fillRect(80, 180, width - 160, height - 240);
-
-    context.fillStyle = "#d4ebf4";
-    context.font = '600 24px "Space Grotesk", sans-serif';
-    context.fillText("Historical NHL Builder", 88, 96);
-
-    context.fillStyle = "#ffffff";
-    context.font = '700 74px "Barlow Condensed", sans-serif';
-    context.fillText(state.result.letterGrade, 88, 170);
-
-    context.font = '600 30px "Space Grotesk", sans-serif';
-    context.fillText("Historical NHL Builder Result", 220, 120);
-
-    context.fillStyle = "rgba(255, 255, 255, 0.8)";
-    context.font = '500 24px "Space Grotesk", sans-serif';
-    context.fillText(`Lineup score ${state.result.totalScore}`, 220, 162);
-
-    let y = 220;
-    breakdown.forEach((entry) => {
-      context.fillStyle = "rgba(255, 255, 255, 0.92)";
-      context.fillRect(88, y, width - 176, 72);
-
-      context.fillStyle = "#0c6e74";
-      context.font = '700 24px "Space Grotesk", sans-serif';
-      context.fillText(entry.slot, 112, y + 44);
-
-      context.fillStyle = "#11273a";
-      context.font = '700 30px "Barlow Condensed", sans-serif';
-      context.fillText(entry.fullName, 176, y + 34);
-
-      context.fillStyle = "#35536b";
-      context.font = '500 18px "Space Grotesk", sans-serif';
-      wrapCanvasText(
-        context,
-        `${entry.teamAbbrev} · ${entry.decade} · ${entry.positionCode} · ${Object.entries(entry.stats).map(([key, value]) => formatResultStat(key, value)).join(" · ")}`,
-        176,
-        y + 58,
-        680,
-        20,
-      );
-
-      context.fillStyle = "#0c6e74";
-      context.font = '700 26px "Space Grotesk", sans-serif';
-      context.textAlign = "right";
-      context.fillText(String(entry.score), width - 120, y + 45);
-      context.textAlign = "left";
-      y += rowHeight;
-    });
-
-    const scoreSlug = String(state.result.totalScore).replace(/[^0-9.]/g, "").replace(".", "-");
-    const fileName = `nhl-builder-${state.result.letterGrade.toLowerCase()}-score-${scoreSlug}.png`;
-    if (canvas.toBlob) {
-      canvas.toBlob((blob) => {
-        if (!blob) {
-          state.error = "Unable to export image.";
-          render();
-          return;
-        }
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = fileName;
-        link.click();
-        URL.revokeObjectURL(link.href);
-      }, "image/png");
-      return;
-    }
-
-    const link = document.createElement("a");
-    link.href = canvas.toDataURL("image/png");
-    link.download = fileName;
-    link.click();
-  } catch (error) {
-    state.error = error.message || "Unable to export image.";
-    render();
-  }
 }
 
 function renderResults() {
@@ -735,19 +724,9 @@ function renderResults() {
         <p class="result-record">Lineup score</p>
       </div>
     </div>
-    <div class="result-toolbar">
-      <button id="export-result-button" class="action-button export-button" type="button">Export Result Image</button>
-      <p class="result-toolbar-note">The summary card below is also formatted to be easy to screenshot.</p>
-    </div>
+    ${scorecardTotalsMarkup()}
     ${shareCardMarkup()}
   `;
-
-  const exportButton = document.getElementById("export-result-button");
-  if (exportButton) {
-    exportButton.addEventListener("click", () => {
-      exportResultImage();
-    });
-  }
 }
 
 function render() {

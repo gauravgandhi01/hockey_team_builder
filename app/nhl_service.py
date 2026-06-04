@@ -117,6 +117,15 @@ def decade_offer_stats(candidate: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def scorecard_totals(candidate: dict[str, Any]) -> dict[str, int]:
+    stats = candidate["stats"]
+    return {
+        "points": int(stats.get("points", 0) or 0),
+        "goals": int(stats.get("goals", 0) or 0),
+        "assists": int(stats.get("assists", 0) or 0),
+    }
+
+
 class NhlApiService:
     def __init__(
         self,
@@ -711,6 +720,7 @@ class NhlApiService:
                         "rates": scored["ratePercentiles"],
                     },
                     "stats": decade_offer_stats(candidate),
+                    "scorecardTotals": scorecard_totals(candidate),
                 }
             )
 
