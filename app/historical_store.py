@@ -44,6 +44,10 @@ class HistoricalCacheStore:
                 pair_key TEXT PRIMARY KEY,
                 payload_json TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS award_details_cache (
+                cache_key TEXT PRIMARY KEY,
+                payload_json TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS team_decade_pools (
                 pair_key TEXT PRIMARY KEY,
                 scoring_version TEXT NOT NULL,
@@ -138,6 +142,27 @@ class HistoricalCacheStore:
             self._conn.executemany(
                 "INSERT INTO draw_pairs (pair_key, payload_json) VALUES (?, ?)",
                 [(pair["pairKey"], json.dumps(pair)) for pair in pairs],
+            )
+            self._conn.commit()
+
+    def get_award_details(self, cache_key: str) -> list[dict[str, Any]] | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT payload_json FROM award_details_cache WHERE cache_key = ?",
+                (cache_key,),
+            ).fetchone()
+        if row is None:
+            return None
+        return json.loads(row["payload_json"])
+
+    def set_award_details(self, cache_key: str, payload: list[dict[str, Any]]) -> None:
+        with self._lock:
+            self._conn.execute(
+                (
+                    "INSERT OR REPLACE INTO award_details_cache "
+                    "(cache_key, payload_json) VALUES (?, ?)"
+                ),
+                (cache_key, json.dumps(payload)),
             )
             self._conn.commit()
 

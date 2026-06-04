@@ -1,5 +1,6 @@
 from app.nhl_service import decade_offer_stats, format_season_display, make_candidate_key, parse_candidate_key, primary_position_code, slot_for_position_code
 from app.scoring import (
+    cross_position_adjust,
     curve_rating,
     map_letter_grade,
     percentile_rank,
@@ -70,12 +71,22 @@ def test_goalie_curve_softens_dropoff():
     assert curve_rating(82.2, 95.6, "G") == 82.2
 
 
+def test_cross_position_adjust_preserves_forwards_and_compresses_d_and_g():
+    assert cross_position_adjust(93.6, "C") == 93.6
+    assert cross_position_adjust(93.6, "W") == 93.6
+    assert cross_position_adjust(99.0, "D") == 97.3
+    assert cross_position_adjust(97.1, "D") == 95.6
+    assert cross_position_adjust(99.0, "G") == 98.2
+    assert cross_position_adjust(92.9, "G") == 92.4
+    assert cross_position_adjust(84.9, "D") == 84.9
+
+
 def test_rating_tier_uses_coarse_bands():
-    assert rating_tier(96.0) == 1
-    assert rating_tier(92.0) == 2
-    assert rating_tier(84.0) == 3
-    assert rating_tier(76.0) == 4
-    assert rating_tier(75.9) == 5
+    assert rating_tier(99.0) == 1
+    assert rating_tier(94.0) == 2
+    assert rating_tier(80.0) == 3
+    assert rating_tier(60.0) == 4
+    assert rating_tier(49.9) == 5
 
 
 def test_rate_metrics_use_per_game_counts():
@@ -187,7 +198,11 @@ def test_score_role_players_builds_hybrid_scores():
     assert scored["AAA:2000s:1:C"]["score"] > scored["AAA:2000s:2:C"]["score"]
     assert scored["AAA:2000s:1:C"]["rawScore"] == 100.0
     assert scored["AAA:2000s:1:C"]["score"] == 99.0
+    assert scored["AAA:2000s:1:C"]["overallPercentile"] == 100.0
+    assert scored["AAA:2000s:1:C"]["ratingTier"] == 1
     assert scored["AAA:2000s:2:C"]["score"] == 40.0
+    assert scored["AAA:2000s:2:C"]["overallPercentile"] == 0.0
+    assert scored["AAA:2000s:2:C"]["ratingTier"] == 5
     assert scored["AAA:2000s:1:C"]["totalsScore"] == 100.0
     assert scored["AAA:2000s:1:C"]["rateScore"] == 100.0
     assert scored["AAA:2000s:2:C"]["totalsScore"] == 0.0

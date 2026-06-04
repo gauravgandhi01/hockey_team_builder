@@ -637,6 +637,7 @@ function renderPrompt() {
           <h3>${candidate.fullName}</h3>
           <p class="candidate-meta">${candidate.historicalTeamName}</p>
           <div class="candidate-stats">${candidateStatMarkup(candidate)}</div>
+          ${awardChipsMarkup(candidate.awards, "candidate-awards")}
         </div>
       </button>
     `)
@@ -686,6 +687,32 @@ function positionToneClass(slot) {
 
 function tierToneClass(tier) {
   return `tier-${String(tier || "").toLowerCase()}`;
+}
+
+function awardLabel(award) {
+  if (!award) {
+    return "";
+  }
+  if (award.level === "winner") {
+    return award.count > 1 ? `${award.label} x${award.count}` : award.label;
+  }
+  return award.count > 1 ? `${award.label} F x${award.count}` : `${award.label} F`;
+}
+
+function awardChipsMarkup(awards, wrapperClass) {
+  if (!awards || !awards.length) {
+    return "";
+  }
+
+  return `
+    <div class="${wrapperClass}">
+      ${awards.map((award) => `
+        <span class="award-chip ${award.level}" title="${award.level === "winner" ? "Award winner" : "Award finalist"}">
+          ${awardLabel(award)}
+        </span>
+      `).join("")}
+    </div>
+  `;
 }
 
 function cumulativeLineupTotals(breakdown) {
@@ -753,6 +780,7 @@ function shareCardMarkup() {
               <strong>${entry.fullName}</strong>
               <span class="share-slot-meta">${entry.teamAbbrev} · ${entry.decade} · ${entry.positionCode}</span>
               <div class="share-slot-stats">${statSummaryMarkup(entry.stats)}</div>
+              ${awardChipsMarkup(entry.awards, "share-slot-awards")}
             </div>
             <span class="share-slot-score">${entry.score}</span>
           </article>

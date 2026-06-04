@@ -24,6 +24,14 @@ SUPPORTED_DECADES = [1980, 1990, 2000, 2010, 2020]
 DECADE_LABELS = {start: f"{start}s" for start in SUPPORTED_DECADES}
 DECADE_START_BY_LABEL = {label: start for start, label in DECADE_LABELS.items()}
 SKATER_TOI_TRACKING_START_SEASON = 19971998
+AWARD_TROPHIES = {
+    8: {"key": "mvp", "label": "MVP", "allowFinalists": True},
+    11: {"key": "norris", "label": "Norris", "allowFinalists": True},
+    18: {"key": "vezina", "label": "Vezina", "allowFinalists": True},
+    16: {"key": "art-ross", "label": "Art Ross", "allowFinalists": False},
+    15: {"key": "rocket", "label": "Rocket", "allowFinalists": False},
+}
+TRACKED_AWARD_TROPHY_IDS = tuple(AWARD_TROPHIES.keys())
 
 ROLE_CONFIG = {
     "C": {
@@ -79,17 +87,24 @@ GRADE_BANDS = [
     (0.0, "F"),
 ]
 
-RATING_TIER_BANDS = [
-    (95.0, 1),
+RATING_TIER_PERCENTILE_BANDS = [
+    (97.0, 1),
     (90.0, 2),
-    (84.0, 3),
-    (76.0, 4),
+    (75.0, 3),
+    (50.0, 4),
     (0.0, 5),
 ]
 
 MIN_DECADE_GAMES = 100
 HYBRID_TOTALS_WEIGHT = 0.70
 HYBRID_RATES_WEIGHT = 0.30
+CROSS_POSITION_CALIBRATION_FLOOR = 85.0
+ROLE_SCORE_ADJUST_FACTORS = {
+    "C": 1.00,
+    "W": 1.00,
+    "D": 0.88,
+    "G": 0.94,
+}
 RATING_CURVE_FLOOR_RAW = 85.0
 RATING_CURVE_LOW = 40.0
 RATING_CURVE_MID = 70.0
@@ -101,7 +116,7 @@ GOALIE_RATING_CURVE_MID = 80.0
 GOALIE_RATING_CURVE_HIGH = 99.0
 GOALIE_RATING_CURVE_EXPONENT = 1.1
 PROJECTED_OTL = 8
-SCHEMA_VERSION = "historical-cache-v1"
-SCORING_VERSION = "historical-hybrid-70-30-v10"
+SCHEMA_VERSION = "historical-cache-v2"
+SCORING_VERSION = "historical-hybrid-70-30-v13"
 LOGO_URL_TEMPLATE = "https://assets.nhle.com/logos/nhl/svg/{abbrev}_light.svg"
 HEADSHOT_FALLBACK_TEMPLATE = "https://assets.nhle.com/mugs/nhl/{season}/{abbrev}/{player_id}.png"

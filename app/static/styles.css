@@ -625,7 +625,9 @@ button {
 }
 
 .candidate-topline,
-.candidate-stats {
+.candidate-stats,
+.candidate-awards,
+.share-slot-awards {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -724,6 +726,38 @@ button {
   border: 1px solid rgba(157, 177, 193, 0.08);
   font-size: 0.66rem;
   color: var(--ink-soft);
+}
+
+.candidate-awards {
+  margin-top: 5px;
+}
+
+.award-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 20px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(157, 177, 193, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.award-chip.winner {
+  background: rgba(255, 214, 102, 0.12);
+  border-color: rgba(255, 214, 102, 0.24);
+  color: #ffe09a;
+}
+
+.award-chip.finalist {
+  background: rgba(82, 198, 200, 0.10);
+  border-color: rgba(82, 198, 200, 0.2);
+  color: #bff8fb;
 }
 
 .result-header {
@@ -1006,6 +1040,17 @@ button {
   color: var(--ink-soft);
   font-size: 0.62rem;
   line-height: 1;
+}
+
+.share-slot-awards {
+  margin-top: 2px;
+  gap: 4px;
+}
+
+.share-slot-awards .award-chip {
+  min-height: 18px;
+  padding: 2px 6px;
+  font-size: 0.58rem;
 }
 
 .share-slot-score {
@@ -1429,6 +1474,16 @@ button {
   .share-slot-stats span {
     padding: 2px 4px;
     font-size: 0.56rem;
+  }
+
+  .share-slot-awards {
+    gap: 3px;
+  }
+
+  .share-slot-awards .award-chip {
+    min-height: 16px;
+    padding: 2px 5px;
+    font-size: 0.54rem;
   }
 
   .share-slot-score {

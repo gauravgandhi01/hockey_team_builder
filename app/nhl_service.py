@@ -10,6 +10,7 @@ import httpx
 from fastapi import HTTPException
 
 from app.constants import (
+    AWARD_TROPHIES,
     BASE_RECORDS_URL,
     BASE_WEB_URL,
     DECADE_LABELS,
@@ -22,6 +23,7 @@ from app.constants import (
     SLOT_LABELS,
     SLOT_SEQUENCE,
     SLOT_SORT_ORDER,
+    TRACKED_AWARD_TROPHY_IDS,
     SUPPORTED_DECADES,
     SUPPORTED_GAME_TYPE,
 )
@@ -30,13 +32,13 @@ from app.scoring import (
     map_letter_grade,
     project_record,
     rate_metrics,
-    rating_tier,
     score_role_players,
     totals_metrics,
 )
 
 PRIMARY_POSITION_ORDER = {"C": 0, "L": 1, "R": 2, "D": 3, "G": 4}
 ROLE_ORDER = ["C", "W", "D", "G"]
+AWARD_CACHE_KEY = "tracked-awards-v1"
 
 
 def logo_url(abbrev: str) -> str:
@@ -157,6 +159,8 @@ class NhlApiService:
         self._season_stats_cache: dict[tuple[str, str, int], dict[str, Any]] = {}
         self._pair_pool_cache: dict[str, dict[str, Any]] = {}
         self._leaderboard_cache: dict[tuple[int, str], dict[str, dict[str, Any]]] = {}
+        self._award_details: list[dict[str, Any]] | None = None
+        self._award_index: dict[tuple[int, int, int], list[dict[str, Any]]] | None = None
         self._closed = False
 
     async def aclose(self) -> None:
@@ -202,12 +206,26 @@ class NhlApiService:
         self._draw_pair_by_key = {pair["pairKey"]: pair for pair in ordered}
         return ordered
 
+    def _franchise_catalog_has_team_ids(self, entries: list[dict[str, Any]]) -> bool:
+        return all(
+            "teamId" in season_row
+            for entry in entries
+            for season_row in entry.get("seasonRows", [])
+        )
+
+    def _draw_pairs_have_team_ids(self, pairs: list[dict[str, Any]]) -> bool:
+        return all(
+            "teamId" in season_team
+            for pair in pairs
+            for season_team in pair.get("seasonTeams", [])
+        )
+
     async def get_franchise_catalog(self) -> list[dict[str, Any]]:
         if self._franchise_catalog is not None:
             return self._franchise_catalog
 
         cached = self.store.load_franchise_catalog()
-        if cached:
+        if cached and self._franchise_catalog_has_team_ids(cached):
             return self._cache_franchise_catalog(cached)
 
         franchise_payload = await self._get_records_json("franchise")
@@ -224,6 +242,7 @@ class NhlApiService:
             rows_by_franchise[int(row["franchiseId"])] .append(
                 {
                     "seasonId": int(row["seasonId"]),
+                    "teamId": int(row["teamId"]),
                     "triCode": row["triCode"],
                     "teamName": row["teamName"],
                 }
@@ -254,7 +273,7 @@ class NhlApiService:
             return self._draw_pairs
 
         cached = self.store.load_draw_pairs()
-        if cached:
+        if cached and self._draw_pairs_have_team_ids(cached):
             return self._cache_draw_pairs(cached)
 
         catalog = await self.get_franchise_catalog()
@@ -292,6 +311,7 @@ class NhlApiService:
                 season_teams = [
                     {
                         "season": str(row["seasonId"]),
+                        "teamId": row["teamId"],
                         "teamCode": row["triCode"],
                         "teamName": row["teamName"],
                     }
@@ -329,6 +349,95 @@ class NhlApiService:
 
         self.store.save_draw_pairs(pairs)
         return self._cache_draw_pairs(pairs)
+
+    async def get_award_details(self) -> list[dict[str, Any]]:
+        if self._award_details is not None:
+            return self._award_details
+
+        cached = self.store.get_award_details(AWARD_CACHE_KEY)
+        if cached is not None:
+            self._award_details = cached
+            return cached
+
+        payload = await self._get_records_json("award-details")
+        tracked_rows: list[dict[str, Any]] = []
+        for row in payload.get("data", []):
+            trophy_id = int(row.get("trophyId") or 0)
+            if trophy_id not in TRACKED_AWARD_TROPHY_IDS:
+                continue
+            player_id = row.get("playerId")
+            season_id = row.get("seasonId")
+            team_id = row.get("teamId")
+            if player_id is None or season_id is None or team_id is None:
+                continue
+            status = row.get("status")
+            if status not in {"WINNER", "RUNNER_UP", "FINALIST"}:
+                continue
+            tracked_rows.append(
+                {
+                    "playerId": int(player_id),
+                    "seasonId": int(season_id),
+                    "teamId": int(team_id),
+                    "trophyId": trophy_id,
+                    "status": status,
+                }
+            )
+
+        self.store.set_award_details(AWARD_CACHE_KEY, tracked_rows)
+        self._award_details = tracked_rows
+        return tracked_rows
+
+    async def get_award_index(self) -> dict[tuple[int, int, int], list[dict[str, Any]]]:
+        if self._award_index is not None:
+            return self._award_index
+
+        rows = await self.get_award_details()
+        index: dict[tuple[int, int, int], list[dict[str, Any]]] = defaultdict(list)
+        for row in rows:
+            index[(row["playerId"], row["seasonId"], row["teamId"])].append(row)
+        self._award_index = dict(index)
+        return self._award_index
+
+    async def summarize_candidate_awards(
+        self,
+        player_id: int,
+        season_teams: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        award_index = await self.get_award_index()
+        trophy_counts: dict[int, dict[str, int]] = defaultdict(lambda: {"winner": 0, "finalist": 0})
+        for season_team in season_teams:
+            stint_key = (player_id, int(season_team["season"]), int(season_team["teamId"]))
+            for award in award_index.get(stint_key, []):
+                trophy_config = AWARD_TROPHIES[award["trophyId"]]
+                if award["status"] == "WINNER":
+                    trophy_counts[award["trophyId"]]["winner"] += 1
+                elif trophy_config["allowFinalists"]:
+                    trophy_counts[award["trophyId"]]["finalist"] += 1
+
+        awards: list[dict[str, Any]] = []
+        for trophy_id, trophy_config in AWARD_TROPHIES.items():
+            counts = trophy_counts.get(trophy_id)
+            if counts is None:
+                continue
+            if counts["winner"] > 0:
+                awards.append(
+                    {
+                        "key": trophy_config["key"],
+                        "label": trophy_config["label"],
+                        "level": "winner",
+                        "count": counts["winner"],
+                    }
+                )
+            elif counts["finalist"] > 0 and trophy_config["allowFinalists"]:
+                awards.append(
+                    {
+                        "key": trophy_config["key"],
+                        "label": trophy_config["label"],
+                        "level": "finalist",
+                        "count": counts["finalist"],
+                    }
+                )
+        return awards
 
     async def get_draw_pair(self, pair_key: str) -> dict[str, Any] | None:
         pairs = await self.get_draw_pairs()
@@ -474,6 +583,7 @@ class NhlApiService:
                 slot = slot_for_position_code(position_code)
                 if slot is None:
                     continue
+                awards = await self.summarize_candidate_awards(aggregate["playerId"], pair["seasonTeams"])
                 games_played = aggregate["stats"]["gamesPlayed"]
                 stats = {
                     "gamesPlayed": int(games_played),
@@ -503,6 +613,7 @@ class NhlApiService:
                     "historicalTeamLogo": pair["historicalTeam"]["logo"],
                     "modernFranchiseAbbrev": pair["modernFranchise"]["abbrev"],
                     "decade": pair["decadeLabel"],
+                    "awards": awards,
                     "stats": stats,
                 }
                 candidates.append(candidate)
@@ -510,6 +621,7 @@ class NhlApiService:
             for aggregate in goalies.values():
                 if aggregate["stats"]["gamesPlayed"] < MIN_DECADE_GAMES:
                     continue
+                awards = await self.summarize_candidate_awards(aggregate["playerId"], pair["seasonTeams"])
                 stats = {
                     "gamesPlayed": int(aggregate["stats"]["gamesPlayed"]),
                     "wins": int(aggregate["stats"]["wins"]),
@@ -541,6 +653,7 @@ class NhlApiService:
                     "historicalTeamLogo": pair["historicalTeam"]["logo"],
                     "modernFranchiseAbbrev": pair["modernFranchise"]["abbrev"],
                     "decade": pair["decadeLabel"],
+                    "awards": awards,
                     "stats": stats,
                 }
                 candidates.append(candidate)
@@ -670,7 +783,8 @@ class NhlApiService:
                         "historicalTeamAbbrev": candidate["historicalTeamAbbrev"],
                         "historicalTeamName": candidate["historicalTeamName"],
                         "historicalTeamLogo": candidate["historicalTeamLogo"],
-                        "ratingTier": rating_tier(scored["score"]) if scored is not None else None,
+                        "ratingTier": scored.get("ratingTier") if scored is not None else None,
+                        "awards": candidate.get("awards", []),
                         "offerStats": decade_offer_stats(candidate),
                     }
                 )
@@ -755,6 +869,7 @@ class NhlApiService:
                     "decade": pair["decadeLabel"],
                     "positionCode": candidate["positionCode"],
                     "headshot": candidate["headshot"],
+                    "awards": candidate.get("awards", []),
                     "score": scored["score"],
                     "rawScore": scored["rawScore"],
                     "totalsScore": scored["totalsScore"],

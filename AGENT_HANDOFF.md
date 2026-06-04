@@ -1,46 +1,176 @@
-# NHL Builder Agent Handoff
+# linecraft Agent Handoff
 
-## Project Summary
-`nhl_builder` is a lightweight FastAPI web prototype for an NHL lineup-building game inspired by `82-0.com`.
+## Snapshot
+`linecraft` is a FastAPI + vanilla JS single-page NHL lineup game built around historical franchise-and-decade draws.
 
-The current product is a single-page web app with a Python backend and a vanilla JS/CSS frontend. It uses live NHL API data and has no database, authentication, persistence, or build step.
+This is no longer the original current-roster prototype. The shipped product is now:
+- historical-only
+- franchise-and-decade based
+- backed by NHL historical team season stats
+- cached aggressively in local SQLite plus in-memory hot caches
+- branded as `linecraft`
 
-Current gameplay:
-- The user builds a 5-slot lineup in this fixed order: `C`, `W`, `W`, `D`, `G`.
-- Team selection is team-first, not slot-first.
-- The user manually clicks a button to draw a random team.
-- The user may choose any player from that team whose natural position still fits an open lineup slot.
-- The user has exactly one reroll per run, only while a team is currently offered.
-- After 5 picks, the lineup is graded against the active NHL player pool.
+As of the latest verification:
+- tests: `29 passed`
+- runtime entrypoint: `uvicorn app.main:app --reload`
+- local cache DB: `storage/historical_cache.sqlite3`
+
+## Current Product Behavior
+
+### Core Game Loop
+The user builds a fixed 6-slot lineup in this order:
+1. `C`
+2. `W`
+3. `W`
+4. `D`
+5. `D`
+6. `G`
+
+Flow:
+- user starts a run
+- app draws a random valid `current franchise + decade` pair
+- user can select any player from that franchise-decade pool whose natural slot still fits an open lineup slot
+- after each pick, the next draw happens automatically
+- after the final pick, the lineup is graded
+
+### Draw Model
+Supported decades:
+- `1980s`
+- `1990s`
+- `2000s`
+- `2010s`
+- `2020s`
+
+Only current NHL franchises are primary draw targets, but historical predecessor branding is resolved when the decade requires it.
+Examples:
+- `WPG + 2000s` can resolve to `ATL`
+- `COL + 1980s` can resolve to `QUE`
+- `CAR` can resolve to `HFD`
+- `DAL` can resolve to `MNS`
+
+The app presents the historical team identity as the primary draw label and logo, and shows modern franchise context as a secondary note when applicable.
+
+### Rerolls
+Each run has two independent one-time rerolls handled in the frontend:
+- `Reroll Team`: keeps the decade fixed and redraws only the franchise
+- `Reroll Decade`: keeps the franchise fixed and redraws only the decade
+
+The frontend prevents additional use after one successful reroll of each type.
+The backend does not independently enforce a one-time reroll budget.
+
+### Candidate Eligibility
+A candidate is eligible only if:
+- they are part of the aggregated regular-season franchise-decade pool
+- they reached the minimum threshold of `100 GP` with that franchise in that decade
+- their derived slot matches an open lineup slot
+- they have not already been selected in the lineup
+
+Primary position is inferred from the position where the player logged the most games in that franchise-decade pool:
+- `C -> C`
+- `L/R -> W`
+- `D -> D`
+- `G -> G`
+
+### Candidate Ordering And Display
+Candidates are currently sorted by:
+1. decade `gamesPlayed` descending
+2. slot sort order `C, W, D, G`
+3. player name
+
+This is intentionally transparent. Hidden preview scores are not shown and do not drive ordering.
+
+Candidate cards display:
+- historical team abbreviation
+- player position badge
+- a coarse hidden-strength tier badge (`Tier 1` through `Tier 5`)
+- role-specific decade stats
+
+Visible stats by role:
+- `C`: `P`, `A`, `G`, `SOG`
+- `W`: `P`, `G`, `SOG`
+- `D`: `P`, `A`, `SOG`, optionally `TOI`
+- `G`: `W`, `SO`, `GAA`, `SV%`
+
+### Tier System
+The app now exposes a coarse tier bucket on candidate cards without revealing exact ratings.
+
+Current tier bands:
+- `Tier 1`: `95+`
+- `Tier 2`: `90-94.9`
+- `Tier 3`: `84-89.9`
+- `Tier 4`: `76-83.9`
+- `Tier 5`: `<76`
+
+This is derived from the hidden role rating and exists only to give users directional signal.
+
+## Branding And UI
+
+### Brand
+The site is branded as `linecraft`.
+Current brand assets and text:
+- logo file used by the app: `app/static/logo.png`
+- transparent logo source was replaced from `xazvi-Photoroom.png`
+- site footer includes:
+  - `This site is not affiliated with the NHL.`
+  - `Made by G`
+- share card footer includes `linecraft.lol`
+
+### Layout And Theme
+The UI is currently:
+- dark themed
+- intentionally compacted for laptop and mobile
+- mobile-optimized with internal scrolling for long candidate lists
+- built entirely in `app/static/app.js` + `app/static/styles.css`
+
+Important current UI details:
+- `Start Over Run` is now a top-right hero chip, visually distinct from the informational chips
+- the hero subtitle now explains grading more clearly
+- the share card is the main end-state result artifact
+- the results area no longer shows a duplicate score header above the share card
+- the share-card score block is now the primary score presentation
+- no export button exists anymore
+
+### Shuffle Animation
+The team/decade shuffle animation was refactored to stop flickering the lineup strip.
+Current behavior:
+- during shuffle, only the draw card is updated frame-by-frame
+- the lineup strip is not fully re-rendered each frame
+- shuffle uses team logos and decade pills
+- the animation cadence eases instead of ticking at a flat interval
 
 ## Repository Layout
-Top-level files and directories that matter:
-- `app/main.py`: FastAPI app setup, lifespan management, route wiring.
-- `app/nhl_service.py`: NHL API access, caching, candidate generation, leaderboard construction, lineup grading.
-- `app/scoring.py`: percentile ranking, per-game normalization, weighted scoring, letter-grade mapping.
-- `app/constants.py`: game constants, scoring weights, cache TTLs, game slot order, minimum games threshold.
-- `app/models.py`: Pydantic request models.
-- `app/templates/index.html`: single Jinja template.
-- `app/static/app.js`: entire frontend state machine and rendering logic.
-- `app/static/styles.css`: all styling and UI animation.
-- `tests/test_api.py`: integration-style tests using a mocked NHL API transport.
-- `tests/test_scoring.py`: unit tests for filtering and scoring behavior.
-- `nhl-api-docs/`: local NHL API reference materials used during development. Runtime does not import from here.
-- `README.md`: minimal run/test instructions.
+Key files:
+- `app/main.py`: FastAPI app setup, lifespan, routes, service injection
+- `app/constants.py`: slots, decades, scoring weights, curve constants, scoring version, logos
+- `app/models.py`: request models
+- `app/nhl_service.py`: core historical data pipeline, draw generation, grading
+- `app/scoring.py`: weighted metric scoring, percentile logic, rating curves, grade/tier mapping
+- `app/historical_store.py`: SQLite persistence layer
+- `app/prewarm_historical.py`: manual cache prewarm entrypoint
+- `app/templates/index.html`: only HTML template
+- `app/static/app.js`: full frontend state machine and rendering
+- `app/static/styles.css`: full styling
+- `tests/test_api.py`: mocked integration tests
+- `tests/test_scoring.py`: scoring and helper unit tests
+- `storage/historical_cache.sqlite3`: local persisted cache, generated at runtime
+- `nhl-api-docs/`: local reference docs, not used at runtime
 
 ## Runtime Stack
 Backend:
-- Python 3.13 in local development so far.
+- Python 3.13 in local development
 - FastAPI
 - Uvicorn
 - httpx
 - Jinja2
+- sqlite3 from the stdlib
 
 Frontend:
-- Server-rendered HTML shell via Jinja.
-- No framework.
-- All interaction is in `app/static/app.js`.
-- No bundler, no TypeScript, no npm tooling.
+- server-rendered HTML shell
+- vanilla JS
+- vanilla CSS
+- no bundler
+- no npm tooling
+- no TypeScript
 
 ## How To Run
 ```bash
@@ -49,384 +179,513 @@ source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
-Then open `http://127.0.0.1:8000`.
+
+Open:
+- `http://127.0.0.1:8000`
+
+## How To Prewarm The Historical Cache
+```bash
+source .venv/bin/activate
+python -m app.prewarm_historical
+```
+
+This fully materializes:
+- franchise catalog
+- draw pairs
+- raw season stats
+- team-decade pools
+- decade-role leaderboards
 
 ## How To Test
 ```bash
 source .venv/bin/activate
 pytest -q
 ```
-Current test status at last verification:
-- `11 passed`
 
-## Current Product Rules
+Current baseline:
+- `29 passed`
 
-### Lineup Structure
-The lineup always contains exactly:
-1. `C`
-2. `W`
-3. `W`
-4. `D`
-5. `G`
+## HTTP API
 
-This order is enforced during grading.
+### `GET /`
+Serves the single-page app.
 
-### Team Draw Rules
-- Draws are manual, triggered by the frontend button.
-- The backend selects a random team from current NHL standings.
-- The frontend handles the one-time reroll UX.
-- Reroll is not enforced on the backend. It is a frontend-only product rule right now.
+### `POST /api/game/draw`
+Request body:
+```json
+{
+  "openSlots": ["C", "W", "W", "D", "D", "G"],
+  "excludeCandidateKeys": [],
+  "lockFranchiseAbbrev": "WSH",
+  "lockDecade": "2000s",
+  "excludePairKey": "WSH:1990s"
+}
+```
 
-### Candidate Eligibility Rules
-A player is offered only if all of these are true:
-- They are on `v1/roster/{team}/current`.
-- Their natural position maps to at least one open lineup slot:
-  - `C` -> Center slot
-  - `L` or `R` -> Winger slot
-  - `D` -> Defenseman slot
-  - `G` -> Goalie slot
-- They have not already been selected in the current run.
-- Their current-season featured stat block reports at least `20` games played.
+Notes:
+- `lockFranchiseAbbrev` is used for decade rerolls
+- `lockDecade` is used for team rerolls
+- `excludePairKey` avoids redrawing the exact same franchise-decade pair
 
-This 20-game threshold is defined in `app/constants.py` as `MIN_GAMES_PLAYED = 20`.
+Response shape includes:
+- `pairKey`
+- `modernFranchise`
+- `historicalTeam`
+- `decade`
+- `seasonRange`
+- `availableSlots`
+- `candidates[]`
 
-### Candidate Sorting
-Offered candidates are sorted by current-season raw `points` descending.
-This is only for display ordering.
-It is not the rating formula.
+Each candidate currently includes:
+- `candidateKey`
+- `playerId`
+- `fullName`
+- `headshot`
+- `positionCode`
+- `eligibleSlot`
+- `eligibleSlotLabel`
+- `historicalTeamAbbrev`
+- `historicalTeamName`
+- `historicalTeamLogo`
+- `ratingTier`
+- `offerStats`
 
-### Visible Card Stats
-Offer cards show season totals, not per-game values:
-- Skaters: `PTS`, `G`, `A`
-- Goalies: `GAA`, `SV%`
+### `POST /api/game/grade`
+Request body:
+```json
+{
+  "lineup": [
+    {"slot": "C", "candidateKey": "..."},
+    {"slot": "W", "candidateKey": "..."},
+    {"slot": "W", "candidateKey": "..."},
+    {"slot": "D", "candidateKey": "..."},
+    {"slot": "D", "candidateKey": "..."},
+    {"slot": "G", "candidateKey": "..."}
+  ]
+}
+```
 
-### Rating Rules
-The actual lineup grading uses percentile-based weighted composites across the active-player pool for each role.
+Response currently includes:
+- `lineupBreakdown`
+- `totalScore`
+- `letterGrade`
+- `projectedRecord`
 
 Important nuance:
-- Display ordering uses raw season `points`.
-- Display card stats use raw totals.
-- Rating normalization uses per-game values where appropriate.
-
-## NHL Data Sources
-The app uses live NHL endpoints from `https://api-web.nhle.com/v1`.
-
-Primary endpoints in use:
-- `v1/standings/now`
-  - used to get current teams
-  - also used to capture `teamLogo` if available
-- `v1/roster/{team}/current`
-  - used to get the current roster
-- `v1/player/{playerId}/landing`
-  - used to get `featuredStats.regularSeason.subSeason`
-
-The local `nhl-api-docs/` folder is reference material only.
-The app does not consume any generated artifacts from it at runtime.
+- `projectedRecord` is still returned by the API
+- the UI no longer displays projected record
 
 ## Backend Architecture
 
 ### `app/main.py`
 Responsibilities:
-- Creates the FastAPI app.
-- Creates or injects an `NhlApiService`.
-- Owns the shared `httpx.AsyncClient` lifecycle.
-- Mounts `/static`.
-- Serves `/` and the two JSON routes.
+- creates the FastAPI app
+- creates or accepts an injected `NhlApiService`
+- manages the shared `httpx.AsyncClient`
+- mounts `/static`
+- serves `/`
+- exposes `/api/game/draw` and `/api/game/grade`
+- optionally starts background prewarm on startup
 
-Routes:
-- `GET /`
-- `POST /api/game/slot`
-- `POST /api/game/grade`
-
-Important implementation note:
-- The Jinja `TemplateResponse` call must use the current Starlette signature:
+Important note:
+- Jinja `TemplateResponse` uses the current Starlette signature:
   - `TemplateResponse(request=..., name=..., context=...)`
-- This was a real bug earlier and is worth preserving.
+- this fixed a real runtime bug and should not be reverted
 
 ### `app/models.py`
-Request models:
-- `OfferRequest`
-  - `availableSlots: list["C"|"W"|"D"|"G"]`
-  - `excludePlayerIds: list[int]`
+Current request models:
+- `DrawRequest`
+  - `openSlots`
+  - `excludeCandidateKeys`
+  - `lockFranchiseAbbrev`
+  - `lockDecade`
+  - `excludePairKey`
 - `GradeRequest`
   - `lineup: list[LineupItem]`
 - `LineupItem`
-  - `slot`, `playerId`, `teamAbbrev`
+  - `slot`
+  - `candidateKey`
 
-### `app/cache.py`
-Simple in-memory TTL cache.
-Used only in-process.
-No external store.
+### `app/historical_store.py`
+This is the persistent SQLite cache.
 
-### `app/constants.py`
-Key constants:
-- `SLOT_SEQUENCE`
-- `SLOT_LABELS`
-- `ROLE_CONFIG`
-- `GRADE_BANDS`
-- `MIN_GAMES_PLAYED = 20`
-- cache TTL values
+Tables:
+- `meta`
+- `franchise_catalog`
+- `team_season_stats`
+- `draw_pairs`
+- `team_decade_pools`
+- `decade_role_leaderboards`
+
+Key design points:
+- raw season payloads are persisted indefinitely
+- derived caches are versioned by `SCORING_VERSION`
+- schema version is tracked separately by `SCHEMA_VERSION`
+- WAL mode and `synchronous=NORMAL` are enabled
 
 ### `app/nhl_service.py`
-This is the core backend module.
+This is the core service and the most important file in the repo.
 
-Key responsibilities:
-- load current teams
-- cache teams, rosters, player landing payloads, and role leaderboards
-- build candidate offers for a random team
-- compute the global rating pool by role
-- validate and grade submitted lineups
+#### Data Sources
+The service uses these NHL endpoints:
+- `https://records.nhl.com/site/api/franchise`
+- `https://records.nhl.com/site/api/franchise-season-results`
+- `https://api-web.nhle.com/v1/club-stats/{team}/{season}/{gameType}`
 
-Key helper functions:
-- `player_slot(player)`
-  - maps NHL roster position to game slot
-- `roster_players(roster)`
-  - flattens forwards + defensemen + goalies
-- `featured_stats_from_landing(landing)`
-  - extracts `featuredStats.regularSeason.subSeason`
-- `meets_games_threshold(stats)`
-  - enforces 20 GP minimum
-- `offer_stats_for_slot(slot, stats)`
-  - trims stats for card display
-- `team_logo(team_data, abbrev)`
-  - uses `teamLogo` from standings or falls back to NHL asset URL
+It does not use the old active-roster endpoints anymore.
 
-#### `get_random_team_offer(...)`
-Input:
-- `available_slots`
-- `exclude_player_ids`
+#### Franchise Catalog
+`get_franchise_catalog()`:
+- loads current franchises from the records API
+- filters to franchises where `lastSeasonId` is `null`
+- gathers regular-season franchise season rows
+- stores season-by-season team-code history for each franchise
 
-Behavior:
-- loops through a randomized team order
-- loads the team roster
-- filters to players whose natural positions still fit an open slot
-- fetches landing data for those candidates
-- removes players below the minimum games threshold
-- sorts by `seasonPoints` descending
-- returns the first team that yields at least one valid candidate
+#### Draw Pair Generation
+`get_draw_pairs()`:
+- iterates current franchises
+- iterates supported decades
+- keeps only franchise/decade combinations with at least one season row
+- derives the historical display team from the most common team code in that decade, tie-broken by latest season
+- produces a stable `pairKey` like `WSH:2000s`
+- persists the result to SQLite
 
-Returned payload shape:
-- `team`
-  - `abbrev`
-  - `name`
-  - `logo`
-- `availableSlots`
-- `candidates[]`
-  - `playerId`
-  - `fullName`
-  - `headshot`
-  - `sweaterNumber`
-  - `positionCode`
-  - `teamAbbrev`
-  - `teamName`
-  - `teamLogo`
-  - `eligibleSlot`
-  - `eligibleSlotLabel`
-  - `offerStats`
-  - `hasCurrentSeasonStats`
-  - `seasonPoints`
+Each pair contains:
+- modern franchise identity
+- historical display identity
+- resolved team codes used in that decade
+- season-by-season team rows
+- a formatted start/end season range
 
-#### `get_role_leaderboards()`
-Builds the rating pool for `C`, `W`, `D`, and `G`.
+#### Raw Team Season Stats
+`get_team_season_stats()`:
+- checks in-memory cache
+- falls back to SQLite cache
+- falls back to live NHL API fetch
+- persists raw payload JSON to SQLite
 
-Flow:
-- load all current teams
-- load all current rosters
-- group players by role
-- fetch all landing payloads for those players
-- exclude anyone below 20 GP
-- normalize stats
-- score each role pool via `score_role_players`
-- cache the result for 15 minutes
+#### Team-Decade Pool Construction
+`get_team_decade_pool(pair_key)`:
+- loads the relevant pair
+- fetches each resolved team-season payload in that decade
+- aggregates skaters by `playerId`
+- aggregates goalies by `playerId`
+- applies the `100 GP` minimum
+- determines skater primary position by most games played
+- generates `candidateKey = {pairKey}:{playerId}:{slot}`
+- persists the derived pool to SQLite under the active `SCORING_VERSION`
 
-#### `grade_lineup(...)`
-Validation steps:
-- lineup length must be exactly 5
-- slot order must be `C, W, W, D, G`
-- no duplicate player IDs
-- selected player must still belong to the submitted team and slot
-- selected player must still meet the 20-game minimum
-- selected player must exist in the cached role leaderboard
+Skater aggregate fields currently retained:
+- `gamesPlayed`
+- `goals`
+- `assists`
+- `points`
+- `shots`
+- `avgTimeOnIcePerGame`
 
-Output:
-- `lineupBreakdown`
-- `totalScore`
-- `letterGrade`
+Goalie aggregate fields currently retained:
+- `gamesPlayed`
+- `wins`
+- `shutouts`
+- `savePercentage`
+- `goalsAgainstAverage`
 
-## Scoring System
+#### TOI Tracking Compensation
+This was a real bug area and matters.
+
+Problem that existed:
+- older skater seasons did not include `avgTimeOnIcePerGame`
+- those missing seasons were effectively dragging decade TOI values toward zero
+- this produced nonsense for older defensemen, for example Brian Leetch
+
+Current fix:
+- `SKATER_TOI_TRACKING_START_SEASON = 19971998`
+- skater TOI is only weighted using seasons at or after that season when TOI exists
+- pre-1997-98 missing seasons are not treated as zero
+- pre-2000 defense scoring excludes TOI entirely to avoid partial-era bias
+
+#### Decade Role Leaderboards
+`get_decade_role_leaderboard(decade_start, role)`:
+- gathers every eligible candidate from every pair in that decade for the requested role
+- builds totals and rate metrics for each candidate
+- scores them through `score_role_players()`
+- persists the leaderboard to SQLite under the current `SCORING_VERSION`
+
+#### Draw Generation
+`get_random_draw(...)`:
+- filters pairs by optional franchise/decade locks and optional excluded pair key
+- excludes already-selected player IDs by parsing `candidateKey`
+- checks whether each candidate still fits an open slot
+- fetches role leaderboards for the eligible roles in that draw so tier labels can be computed
+- adds `ratingTier` to each candidate
+- sorts display candidates by `gamesPlayed`
+- returns the first pair with at least one valid candidate
+
+#### Grading
+`grade_lineup(...)` enforces:
+- lineup length must match `SLOT_SEQUENCE`
+- slot order must be exactly `C, W, W, D, D, G`
+- no duplicate `candidateKey`
+- no duplicate `playerId`
+- each `candidateKey` must parse successfully
+- submitted slot must match the slot encoded in the `candidateKey`
+- draw pair must exist
+- candidate must still exist in the current team-decade pool
+- candidate must exist in the current decade-role leaderboard
+
+Response breakdown rows currently include:
+- `slot`
+- `slotLabel`
+- `candidateKey`
+- `playerId`
+- `fullName`
+- `teamAbbrev`
+- `teamName`
+- `modernFranchiseAbbrev`
+- `decade`
+- `positionCode`
+- `headshot`
+- `score`
+- `rawScore`
+- `totalsScore`
+- `rateScore`
+- `metricPercentiles`
+- `stats`
+- `scorecardTotals`
+
+### `prewarm_missing()`
+This method:
+- initializes service metadata
+- builds all pair pools
+- builds all decade-role leaderboards
+- writes `prewarm_complete = SCORING_VERSION` to `meta`
+
+## Scoring Model
 Implemented in `app/scoring.py`.
 
-### Percentile Logic
-For each role:
-- each metric is converted into a percentile rank among all eligible players in that role
-- percentile uses average rank for ties
-- weighted percentiles are summed into a `0-100` score
+### High-Level Model
+Scoring is position-relative and decade-relative.
 
-### Per-Game Normalization
-The following counting metrics are normalized to per-game values before percentile scoring:
+Each player is compared against:
+- players from the same role
+- from the same decade
+
+This is not a cross-era global model.
+
+### Hybrid Score
+Each player gets:
+- `totalsScore`
+- `rateScore`
+- `rawScore = 0.70 * totalsScore + 0.30 * rateScore`
+- `score = curved display/game rating from rawScore`
+
+### Current Role Weights
+Current `ROLE_CONFIG`:
+
+`C`
+- `points 0.40`
+- `assists 0.20`
+- `goals 0.15`
+- `shots 0.15`
+
+`W`
+- `points 0.40`
+- `goals 0.25`
+- `shots 0.15`
+
+`D`
+- `points 0.25`
+- `assists 0.20`
+- `avgTimeOnIcePerGame 0.40`
+- `shots 0.15`
+
+`G`
+- `savePercentage 0.40`
+- `wins 0.20`
+- `goalsAgainstAverageInverse 0.20`
+- `shutouts 0.10`
+
+Important current cleanup decisions:
+- `plusMinus` is not considered anywhere anymore
+- `gamesPlayed` is not an explicit scoring metric anymore
+- goalie efficiency metrics are rate-only, not duplicated in totals
+- defense TOI is rate-only and excluded entirely pre-2000
+
+### Totals vs Rate Metrics
+Per-game metrics are:
 - `points`
 - `assists`
 - `goals`
 - `shots`
-- `plusMinus`
 - `wins`
 - `shutouts`
 
-These metrics are not converted to per-game:
-- `gamesPlayed`
-- `savePctg`
-- inverse `goalsAgainstAvg`
+Totals branch excludes:
+- for `D`: `avgTimeOnIcePerGame`
+- for `G`: `savePercentage`, `goalsAgainstAverageInverse`
 
-### Current Role Weights
-Center:
-- points 0.40
-- assists 0.20
-- goals 0.15
-- shots 0.15
-- gamesPlayed 0.10
+Rate branch excludes:
+- for pre-2000 `D`: `avgTimeOnIcePerGame`
 
-Winger:
-- points 0.40
-- goals 0.25
-- shots 0.15
-- plusMinus 0.10
-- gamesPlayed 0.10
+### Rating Curves
+There are now separate rating curves for skaters and goalies.
 
-Defenseman:
-- points 0.35
-- assists 0.20
-- plusMinus 0.20
-- shots 0.15
-- gamesPlayed 0.10
+Skater/default curve:
+- floor raw: `85.0`
+- low: `40.0`
+- mid: `70.0`
+- high: `99.0`
+- exponent: `1.6`
 
-Goalie:
-- savePctg 0.40
-- wins 0.20
-- inverse GAA 0.20
-- shutouts 0.10
-- gamesPlayed 0.10
+Goalie curve:
+- floor raw: `80.0`
+- low: `55.0`
+- mid: `80.0`
+- high: `99.0`
+- exponent: `1.1`
 
-### Letter Grade Mapping
-`GRADE_BANDS` currently maps:
-- `A+` at `>= 95`
-- down through `D-`
-- `F` below `40`
+Reason for the goalie-specific curve:
+- the original curve produced overly harsh goalie dropoff
+- for example, elite-but-not-very-top goalies were collapsing into the low `70s`
+- the softer goalie curve now preserves separation without overpunishing very good goalies
+
+### Letter Grades
+Lineup `totalScore` is the average of the 6 displayed player scores.
+
+Current bands:
+- `A+ >= 95`
+- `A >= 90`
+- `A- >= 85`
+- `B+ >= 80`
+- `B >= 75`
+- `B- >= 70`
+- `C+ >= 65`
+- `C >= 60`
+- `C- >= 55`
+- `D+ >= 50`
+- `D >= 45`
+- `D- >= 40`
+- `F < 40`
 
 ## Frontend Architecture
 All frontend behavior lives in `app/static/app.js`.
 
-### Frontend State
-Main `state` keys:
+### State Model
+Important client state includes:
 - `lineup`
 - `currentIndex`
-- `currentOffer`
+- `currentDraw`
 - `result`
 - `loadingKind`
 - `error`
-- `shuffleTeam`
-- `rerollUsed`
+- `shuffleFrame`
+- `rerollTeamUsed`
+- `rerollDecadeUsed`
+- `candidateFilter`
 
-### Frontend Flow
-1. `startNewRun()` resets all state.
-2. User clicks `Draw Opening Team`.
-3. `drawTeamOffer()` starts a shuffle animation and calls `/api/game/slot`.
-4. Offered candidates are displayed.
-5. User selects a player.
-6. The candidate is assigned to the first open matching slot.
-7. User clicks `Draw Next Team` and repeats.
-8. After 5 picks, `gradeLineup()` calls `/api/game/grade`.
-9. Scorecard renders.
+### Key Frontend Behavior
+- draws automatically after each non-final pick
+- shuffling is visual only and delayed to feel game-like
+- position filter chips (`All`, `C`, `W`, `D`, `G`) are client-side only
+- candidate filtering resets to `ALL` after every new draw or reroll
+- result rendering is now share-card-first
 
-### Important Frontend Product Rules
-- Reroll is frontend-enforced only.
-- Reroll can be used once and only when a team is currently active.
-- When there is no active team, the team panel is empty and the draw button is the primary action.
-- Shuffle animation uses a static frontend pool of team names/logos while waiting for the backend response.
+### Candidate Card UX
+Current cards show:
+- player headshot
+- team abbreviation
+- coarse `Tier N` badge
+- position pill
+- player name
+- historical team name
+- visible role-specific stats
 
-### Team Logos in Frontend
-The shuffle animation currently uses a hardcoded `SHUFFLE_TEAM_POOL` with NHL asset URLs.
-The actual offered team uses `team.logo` returned by the backend.
+### Share Card UX
+The final share card currently includes:
+- linecraft logo
+- combined decades used in the lineup
+- cumulative `P`, `G`, `A` totals across the lineup
+- one row per player with:
+  - slot pill
+  - player headshot
+  - team logo
+  - player/team/decade/position text
+  - visible stats
+  - per-player score
+- bottom-right footer `linecraft.lol`
 
-### Styling
-Everything is in `app/static/styles.css`.
+Important recent cleanup:
+- the duplicate result header above the share card was removed
+- the share card now owns the primary score presentation
+- the numeric lineup score is emphasized more than the letter grade
 
-Current design priorities:
-- compact laptop-friendly layout
-- vanilla CSS only
-- logo-based shuffle card
-- responsive enough for mobile
+### Mobile Behavior
+The current UI has several mobile-specific optimizations:
+- compressed hero
+- horizontally scrollable lineup strip
+- smaller lineup slots
+- internal vertical scrolling in the candidate grid
+- reduced share-card height
+- denser candidate cards
+- smaller chips and type
 
-## Testing Strategy
+## Current Template / Copy Notes
+`app/templates/index.html` currently contains:
+- eyebrow: `Historical Franchise Mode`
+- updated hero subtitle:
+  - `Build a lineup from random NHL franchise-and-decade draws, then get graded by how each pick stacks up against players from the same decade at that position.`
+- hero chips:
+  - `6 picks`
+  - `1980s to 2020s`
+  - `Start Over Run`
+- footer disclaimer and credit
 
-### Unit Tests
-`tests/test_scoring.py` covers:
-- slot filtering behavior
-- percentile tie handling
-- letter grade mapping
-- missing goalie stats
-- per-game normalization for counting metrics
-- weighted role scoring
+## Testing Surface
 
-### Integration-Style Tests
-`tests/test_api.py` uses `httpx.MockTransport` to fake NHL API responses.
-It covers:
-- root page rendering
-- offer generation
-- team logo propagation
-- candidate sort order
-- 20-game exclusion from offers
-- lineup grading
-- duplicate player rejection
-- sub-threshold player rejection during grading
+### `tests/test_api.py`
+Covers:
+- root render
+- draw response shapes
+- persisted cache reuse across runs
+- predecessor franchise resolution
+- reroll lock behavior by filters
+- invalid grading submissions
+- cumulative scorecard totals
+- draw candidate payloads including `ratingTier`
 
-## Current Known Constraints / Technical Debt
+### `tests/test_scoring.py`
+Covers:
+- candidate key round-tripping
+- slot mapping helpers
+- season formatting
+- percentile logic
+- grade mapping
+- projected record mapping
+- rating curves for skaters and goalies
+- tier mapping
+- totals/rate metric inclusion and exclusion
+- TOI exclusion pre-2000
+- hybrid role scoring
 
-### Backend / Data
-- No persistence.
-- No auth.
-- No leaderboard/history.
-- No server-side session or anti-cheat logic.
-- Reroll count is not validated server-side.
-- Candidate generation still requires multiple live NHL API calls per team draw because player landing data is fetched for all eligible team candidates.
-- First grade request may be relatively expensive because it constructs cached role leaderboards across the league.
+## Known Technical Debt / Caveats
+- `README.md` is partially stale. It still mentions projected record as a visible product behavior even though the UI no longer shows it.
+- API still returns `projectedRecord`, but frontend ignores it.
+- Reroll budgets are enforced in the frontend only.
+- Candidate ordering is by `gamesPlayed`, not by rating, which is intentional but may not match user intuition.
+- Historical logo URLs assume NHL asset availability by team abbreviation. If a predecessor logo disappears upstream, the UI may degrade visually.
+- The app depends on external NHL APIs at runtime unless the relevant cache rows are already populated.
+- There is no auth, no DB migration system, no deploy-specific config, and no analytics.
 
-### Frontend
-- Vanilla JS rendering is manageable now, but state transitions are becoming more complex.
-- There is no dedicated frontend test suite.
-- The frontend assumes backend payload shapes exactly; no versioning layer exists.
+## Safe Places To Modify Common Features
+- scoring weights / curves: `app/constants.py`, `app/scoring.py`
+- historical aggregation rules: `app/nhl_service.py`
+- draw payload shape: `app/nhl_service.py`, `app/models.py`, `app/static/app.js`, tests
+- UI copy/layout: `app/templates/index.html`, `app/static/styles.css`, `app/static/app.js`
+- persistence behavior: `app/historical_store.py`, `app/prewarm_historical.py`
 
-### Product / Data Semantics
-- “Played at least 20 games for the team this season” is approximated by the player landing `featuredStats.regularSeason.subSeason.gamesPlayed` from the current team context.
-- If the NHL API changes shape, candidate filtering and scoring can silently drift.
-- Offer card display stats remain totals even though ratings use per-game normalization.
+## Current Version Markers
+At time of this handoff:
+- `SCHEMA_VERSION = historical-cache-v1`
+- `SCORING_VERSION = historical-hybrid-70-30-v10`
 
-## Useful Upgrade Directions
-High-value next improvements another agent could take on:
-- Add server-side reroll/session validation.
-- Add seeded daily challenge mode.
-- Add local or backend persistence for game history.
-- Add explanations of why a player graded well or poorly using metric percentiles.
-- Add loading/error retry UX for NHL API failures.
-- Add frontend tests.
-- Add precomputed/cached league leaderboards on startup or background refresh to reduce first-grade latency.
-- Add more nuanced scoring metrics, especially for defensemen and goalies.
-- Add filters or alternate modes for historical players if that becomes a requirement.
-
-## Files Most Likely To Change For Common Tasks
-If the next agent needs to:
-- change game rules: `app/constants.py`, `app/nhl_service.py`, `app/static/app.js`
-- change scoring: `app/constants.py`, `app/scoring.py`, `app/nhl_service.py`, `tests/test_scoring.py`
-- change candidate eligibility: `app/nhl_service.py`, `tests/test_api.py`
-- change UI flow: `app/templates/index.html`, `app/static/app.js`, `app/static/styles.css`
-- change API contracts: `app/models.py`, `app/main.py`, `app/nhl_service.py`, `tests/test_api.py`
-
-## Last Verified State
-Last locally verified commands:
-```bash
-source .venv/bin/activate
-pytest -q
-```
-Result:
-- `11 passed`
-
-A live API smoke test also succeeded after the 20-game threshold update, returning a real team offer with valid logo data and points-sorted candidates.
+Any scoring change that affects derived team-decade pools or leaderboards should usually bump `SCORING_VERSION` so stale SQLite-derived payloads are not reused.

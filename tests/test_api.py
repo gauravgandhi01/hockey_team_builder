@@ -61,20 +61,32 @@ class MockHistoricalApi:
         }
         self.season_results = {
             "data": [
-                {"franchiseId": 27, "seasonId": 19801981, "triCode": "QUE", "teamName": "Quebec Nordiques", "gameTypeId": 2},
-                {"franchiseId": 27, "seasonId": 19811982, "triCode": "QUE", "teamName": "Quebec Nordiques", "gameTypeId": 2},
-                {"franchiseId": 27, "seasonId": 19951996, "triCode": "COL", "teamName": "Colorado Avalanche", "gameTypeId": 2},
-                {"franchiseId": 27, "seasonId": 20242025, "triCode": "COL", "teamName": "Colorado Avalanche", "gameTypeId": 2},
-                {"franchiseId": 40, "seasonId": 20242025, "triCode": "UTA", "teamName": "Utah Mammoth", "gameTypeId": 2},
-                {"franchiseId": 40, "seasonId": 20252026, "triCode": "UTA", "teamName": "Utah Mammoth", "gameTypeId": 2},
-                {"franchiseId": 15, "seasonId": 20082009, "triCode": "WSH", "teamName": "Washington Capitals", "gameTypeId": 2},
-                {"franchiseId": 15, "seasonId": 20092010, "triCode": "WSH", "teamName": "Washington Capitals", "gameTypeId": 2},
-                {"franchiseId": 15, "seasonId": 20242025, "triCode": "WSH", "teamName": "Washington Capitals", "gameTypeId": 2},
-                {"franchiseId": 35, "seasonId": 20052006, "triCode": "ATL", "teamName": "Atlanta Thrashers", "gameTypeId": 2},
-                {"franchiseId": 35, "seasonId": 20062007, "triCode": "ATL", "teamName": "Atlanta Thrashers", "gameTypeId": 2},
-                {"franchiseId": 35, "seasonId": 20112012, "triCode": "WPG", "teamName": "Winnipeg Jets", "gameTypeId": 2},
-                {"franchiseId": 35, "seasonId": 20122013, "triCode": "WPG", "teamName": "Winnipeg Jets", "gameTypeId": 2},
-                {"franchiseId": 35, "seasonId": 20242025, "triCode": "WPG", "teamName": "Winnipeg Jets", "gameTypeId": 2},
+                {"franchiseId": 27, "seasonId": 19801981, "teamId": 32, "triCode": "QUE", "teamName": "Quebec Nordiques", "gameTypeId": 2},
+                {"franchiseId": 27, "seasonId": 19811982, "teamId": 32, "triCode": "QUE", "teamName": "Quebec Nordiques", "gameTypeId": 2},
+                {"franchiseId": 27, "seasonId": 19951996, "teamId": 21, "triCode": "COL", "teamName": "Colorado Avalanche", "gameTypeId": 2},
+                {"franchiseId": 27, "seasonId": 20242025, "teamId": 21, "triCode": "COL", "teamName": "Colorado Avalanche", "gameTypeId": 2},
+                {"franchiseId": 40, "seasonId": 20242025, "teamId": 59, "triCode": "UTA", "teamName": "Utah Mammoth", "gameTypeId": 2},
+                {"franchiseId": 40, "seasonId": 20252026, "teamId": 59, "triCode": "UTA", "teamName": "Utah Mammoth", "gameTypeId": 2},
+                {"franchiseId": 15, "seasonId": 20082009, "teamId": 15, "triCode": "WSH", "teamName": "Washington Capitals", "gameTypeId": 2},
+                {"franchiseId": 15, "seasonId": 20092010, "teamId": 15, "triCode": "WSH", "teamName": "Washington Capitals", "gameTypeId": 2},
+                {"franchiseId": 15, "seasonId": 20242025, "teamId": 15, "triCode": "WSH", "teamName": "Washington Capitals", "gameTypeId": 2},
+                {"franchiseId": 35, "seasonId": 20052006, "teamId": 11, "triCode": "ATL", "teamName": "Atlanta Thrashers", "gameTypeId": 2},
+                {"franchiseId": 35, "seasonId": 20062007, "teamId": 11, "triCode": "ATL", "teamName": "Atlanta Thrashers", "gameTypeId": 2},
+                {"franchiseId": 35, "seasonId": 20112012, "teamId": 52, "triCode": "WPG", "teamName": "Winnipeg Jets", "gameTypeId": 2},
+                {"franchiseId": 35, "seasonId": 20122013, "teamId": 52, "triCode": "WPG", "teamName": "Winnipeg Jets", "gameTypeId": 2},
+                {"franchiseId": 35, "seasonId": 20242025, "teamId": 52, "triCode": "WPG", "teamName": "Winnipeg Jets", "gameTypeId": 2},
+            ]
+        }
+        self.award_details = {
+            "data": [
+                {"playerId": 100, "fullName": "Alex Ovechkin", "seasonId": 20082009, "teamId": 15, "trophyId": 8, "status": "WINNER"},
+                {"playerId": 100, "fullName": "Alex Ovechkin", "seasonId": 20092010, "teamId": 15, "trophyId": 8, "status": "WINNER"},
+                {"playerId": 100, "fullName": "Alex Ovechkin", "seasonId": 20082009, "teamId": 15, "trophyId": 16, "status": "WINNER"},
+                {"playerId": 100, "fullName": "Alex Ovechkin", "seasonId": 20092010, "teamId": 15, "trophyId": 15, "status": "WINNER"},
+                {"playerId": 103, "fullName": "Mike Green", "seasonId": 20082009, "teamId": 15, "trophyId": 11, "status": "FINALIST"},
+                {"playerId": 103, "fullName": "Mike Green", "seasonId": 20092010, "teamId": 15, "trophyId": 11, "status": "FINALIST"},
+                {"playerId": 105, "fullName": "Jose Theodore", "seasonId": 20092010, "teamId": 15, "trophyId": 18, "status": "FINALIST"},
+                {"playerId": 217, "fullName": "Connor Hellebuyck", "seasonId": 20242025, "teamId": 52, "trophyId": 18, "status": "WINNER"},
             ]
         }
         self.club_stats = {
@@ -237,6 +249,8 @@ class MockHistoricalApi:
             return make_response(self.franchises)
         if path.endswith("/site/api/franchise-season-results"):
             return make_response(self.season_results)
+        if path.endswith("/site/api/award-details"):
+            return make_response(self.award_details)
         if "/v1/club-stats/" in path:
             parts = path.split("/")
             team = parts[-3]
@@ -288,6 +302,15 @@ def test_draw_endpoint_returns_wsh_2000s_candidates_sorted_by_games_played(tmp_p
     candidate = next(entry for entry in body["candidates"] if entry["playerId"] == 100)
     assert candidate["offerStats"] == {"points": 219, "goals": 106, "shots": 896}
     assert candidate["ratingTier"] == 1
+    assert candidate["awards"] == [
+        {"key": "mvp", "label": "MVP", "level": "winner", "count": 2},
+        {"key": "art-ross", "label": "Art Ross", "level": "winner", "count": 1},
+        {"key": "rocket", "label": "Rocket", "level": "winner", "count": 1},
+    ]
+    defenseman = next(entry for entry in body["candidates"] if entry["playerId"] == 103)
+    assert defenseman["awards"] == [
+        {"key": "norris", "label": "Norris", "level": "finalist", "count": 2},
+    ]
 
 
 def test_repeated_draw_uses_persisted_team_decade_pool_without_new_network_fetch(tmp_path: Path):
@@ -327,6 +350,10 @@ def test_repeated_draw_uses_persisted_team_decade_pool_without_new_network_fetch
         count for url, count in second_transport.calls.items() if "/v1/club-stats/" in url
     )
     assert second_club_calls == 0
+    second_award_calls = sum(
+        count for url, count in second_transport.calls.items() if url.endswith("/site/api/award-details")
+    )
+    assert second_award_calls == 0
 
 
 def test_historical_branding_resolves_predecessor_franchises(tmp_path: Path):
@@ -447,6 +474,11 @@ def test_grade_endpoint_returns_record_projection(tmp_path: Path):
     assert len(body["lineupBreakdown"]) == 6
     winger_row = next(item for item in body["lineupBreakdown"] if item["candidateKey"] == "WSH:2000s:100:W")
     assert winger_row["scorecardTotals"] == {"points": 219, "goals": 106, "assists": 113}
+    assert winger_row["awards"] == [
+        {"key": "mvp", "label": "MVP", "level": "winner", "count": 2},
+        {"key": "art-ross", "label": "Art Ross", "level": "winner", "count": 1},
+        {"key": "rocket", "label": "Rocket", "level": "winner", "count": 1},
+    ]
     goalie_row = next(item for item in body["lineupBreakdown"] if item["slot"] == "G")
     assert goalie_row["teamAbbrev"] == "WSH"
     assert goalie_row["stats"] == {
@@ -456,6 +488,9 @@ def test_grade_endpoint_returns_record_projection(tmp_path: Path):
         "savePercentage": goalie_row["stats"]["savePercentage"],
     }
     assert goalie_row["scorecardTotals"] == {"points": 0, "goals": 0, "assists": 0}
+    assert goalie_row["awards"] == [
+        {"key": "vezina", "label": "Vezina", "level": "finalist", "count": 1},
+    ]
 
 
 def test_grade_endpoint_rejects_duplicate_players(tmp_path: Path):

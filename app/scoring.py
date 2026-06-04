@@ -4,6 +4,7 @@ from bisect import bisect_left, bisect_right
 from typing import Any
 
 from app.constants import (
+    CROSS_POSITION_CALIBRATION_FLOOR,
     GRADE_BANDS,
     GOALIE_RATING_CURVE_EXPONENT,
     GOALIE_RATING_CURVE_FLOOR_RAW,
@@ -13,12 +14,13 @@ from app.constants import (
     HYBRID_RATES_WEIGHT,
     HYBRID_TOTALS_WEIGHT,
     PROJECTED_OTL,
-    RATING_TIER_BANDS,
+    RATING_TIER_PERCENTILE_BANDS,
     RATING_CURVE_EXPONENT,
     RATING_CURVE_FLOOR_RAW,
     RATING_CURVE_HIGH,
     RATING_CURVE_LOW,
     RATING_CURVE_MID,
+    ROLE_SCORE_ADJUST_FACTORS,
     ROLE_CONFIG,
 )
 
@@ -51,11 +53,11 @@ def map_letter_grade(score: float) -> str:
     return "F"
 
 
-def rating_tier(score: float) -> int:
-    for threshold, tier in RATING_TIER_BANDS:
-        if score >= threshold:
+def rating_tier(percentile: float) -> int:
+    for threshold, tier in RATING_TIER_PERCENTILE_BANDS:
+        if percentile >= threshold:
             return tier
-    return RATING_TIER_BANDS[-1][1]
+    return RATING_TIER_PERCENTILE_BANDS[-1][1]
 
 
 def clamp(value: int, minimum: int, maximum: int) -> int:
@@ -105,6 +107,17 @@ def curve_rating(raw_score: float, top_score: float, role: str | None = None) ->
     normalized = (raw - floor) / (top_score - floor)
     return round(
         mid + (normalized**exponent) * (high - mid),
+        1,
+    )
+
+
+def cross_position_adjust(score: float, role: str) -> float:
+    factor = ROLE_SCORE_ADJUST_FACTORS.get(role, 1.0)
+    if score <= CROSS_POSITION_CALIBRATION_FLOOR or factor == 1.0:
+        return round(score, 1)
+    return round(
+        CROSS_POSITION_CALIBRATION_FLOOR
+        + (score - CROSS_POSITION_CALIBRATION_FLOOR) * factor,
         1,
     )
 
@@ -232,10 +245,15 @@ def score_role_players(
         }
 
     top_raw_score = max((player["rawScore"] for player in raw_scored.values()), default=0.0)
+    raw_score_values = [player["rawScore"] for player in raw_scored.values()]
     scored: dict[str, dict[str, Any]] = {}
     for candidate_key, player in raw_scored.items():
+        overall_percentile = round(percentile_rank(raw_score_values, player["rawScore"]) * 100, 1)
+        curved_score = curve_rating(player["rawScore"], top_raw_score, role)
         scored[candidate_key] = {
             **player,
-            "score": curve_rating(player["rawScore"], top_raw_score, role),
+            "overallPercentile": overall_percentile,
+            "ratingTier": rating_tier(overall_percentile),
+            "score": cross_position_adjust(curved_score, role),
         }
     return scored
