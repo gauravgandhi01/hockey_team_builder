@@ -1,4 +1,4 @@
-from app.nhl_service import format_season_display, make_candidate_key, parse_candidate_key, primary_position_code, slot_for_position_code
+from app.nhl_service import decade_offer_stats, format_season_display, make_candidate_key, parse_candidate_key, primary_position_code, slot_for_position_code
 from app.scoring import (
     curve_rating,
     map_letter_grade,
@@ -93,6 +93,31 @@ def test_defense_time_on_ice_is_rate_only():
     defense_rate_weights = rate_metric_weights("D")
     assert "avgTimeOnIcePerGame" not in defense_total_weights
     assert "avgTimeOnIcePerGame" in defense_rate_weights
+
+
+def test_defense_time_on_ice_is_excluded_for_pre_2000_decades():
+    assert "avgTimeOnIcePerGame" not in totals_metric_weights("D", 1990)
+    assert "avgTimeOnIcePerGame" not in rate_metric_weights("D", 1990)
+    assert "avgTimeOnIcePerGame" not in totals_metric_weights("D", 2000)
+    assert "avgTimeOnIcePerGame" in rate_metric_weights("D", 2000)
+
+
+def test_defense_offer_stats_omit_toi_when_untracked():
+    assert decade_offer_stats(
+        {
+            "eligibleSlot": "D",
+            "stats": {
+                "points": 100,
+                "assists": 80,
+                "shots": 250,
+                "avgTimeOnIcePerGame": None,
+            },
+        }
+    ) == {
+        "points": 100,
+        "assists": 80,
+        "shots": 250,
+    }
 
 
 def test_totals_metric_weights_drop_goalie_efficiency_metrics():

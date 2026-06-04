@@ -18,6 +18,7 @@ from app.constants import (
     LOGO_URL_TEMPLATE,
     MIN_DECADE_GAMES,
     SCORING_VERSION,
+    SKATER_TOI_TRACKING_START_SEASON,
     SLOT_LABELS,
     SLOT_SEQUENCE,
     SLOT_SORT_ORDER,
@@ -104,12 +105,14 @@ def decade_offer_stats(candidate: dict[str, Any]) -> dict[str, Any]:
             "shots": stats.get("shots", 0),
         }
     if slot == "D":
-        return {
+        offer = {
             "points": stats.get("points", 0),
             "assists": stats.get("assists", 0),
-            "avgTimeOnIcePerGame": stats.get("avgTimeOnIcePerGame", 0),
             "shots": stats.get("shots", 0),
         }
+        if stats.get("avgTimeOnIcePerGame") is not None:
+            offer["avgTimeOnIcePerGame"] = stats.get("avgTimeOnIcePerGame")
+        return offer
     return {
         "wins": stats.get("wins", 0),
         "shutouts": stats.get("shutouts", 0),
@@ -413,6 +416,7 @@ class NhlApiService:
                                 "points": 0,
                                 "shots": 0,
                                 "avgTimeOnIcePerGameWeighted": 0.0,
+                                "avgTimeOnIcePerGameTrackedGames": 0,
                             },
                         },
                     )
@@ -420,9 +424,13 @@ class NhlApiService:
                     aggregate["positionGames"][player.get("positionCode", "")] += games_played
                     for metric in ("gamesPlayed", "goals", "assists", "points", "shots"):
                         aggregate["stats"][metric] += float(player.get(metric) or 0)
-                    aggregate["stats"]["avgTimeOnIcePerGameWeighted"] += (
-                        float(player.get("avgTimeOnIcePerGame") or 0) * games_played
-                    )
+                    avg_toi = player.get("avgTimeOnIcePerGame")
+                    if (
+                        int(season) >= SKATER_TOI_TRACKING_START_SEASON
+                        and avg_toi not in (None, "")
+                    ):
+                        aggregate["stats"]["avgTimeOnIcePerGameWeighted"] += float(avg_toi) * games_played
+                        aggregate["stats"]["avgTimeOnIcePerGameTrackedGames"] += games_played
 
                 for player in stats.get("goalies", []):
                     player_id = int(player["playerId"])
@@ -467,11 +475,12 @@ class NhlApiService:
                     "points": int(aggregate["stats"]["points"]),
                     "shots": int(aggregate["stats"]["shots"]),
                     "avgTimeOnIcePerGame": round(
-                        aggregate["stats"]["avgTimeOnIcePerGameWeighted"] / games_played,
+                        aggregate["stats"]["avgTimeOnIcePerGameWeighted"]
+                        / aggregate["stats"]["avgTimeOnIcePerGameTrackedGames"],
                         3,
                     )
-                    if games_played
-                    else 0.0,
+                    if aggregate["stats"]["avgTimeOnIcePerGameTrackedGames"]
+                    else None,
                 }
                 candidate = {
                     "candidateKey": make_candidate_key(pair_key, aggregate["playerId"], slot),
@@ -571,12 +580,12 @@ class NhlApiService:
                     players.append(
                         {
                             **candidate,
-                            "totalsMetrics": totals_metrics(role, candidate["stats"]),
-                            "rateMetrics": rate_metrics(role, candidate["stats"]),
+                            "totalsMetrics": totals_metrics(role, candidate["stats"], decade_start),
+                            "rateMetrics": rate_metrics(role, candidate["stats"], decade_start),
                         }
                     )
 
-            leaderboard = score_role_players(role, players)
+            leaderboard = score_role_players(role, players, decade_start)
             self.store.set_decade_role_leaderboard(
                 decade_start,
                 role,

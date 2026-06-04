@@ -23,6 +23,7 @@ SLOT_LABELS = {
 SUPPORTED_DECADES = [1980, 1990, 2000, 2010, 2020]
 DECADE_LABELS = {start: f"{start}s" for start in SUPPORTED_DECADES}
 DECADE_START_BY_LABEL = {label: start for start, label in DECADE_LABELS.items()}
+SKATER_TOI_TRACKING_START_SEASON = 19971998
 
 ROLE_CONFIG = {
     "C": {
@@ -88,6 +89,6 @@ RATING_CURVE_HIGH = 99.0
 RATING_CURVE_EXPONENT = 1.6
 PROJECTED_OTL = 8
 SCHEMA_VERSION = "historical-cache-v1"
-SCORING_VERSION = "historical-hybrid-70-30-v7"
+SCORING_VERSION = "historical-hybrid-70-30-v8"
 LOGO_URL_TEMPLATE = "https://assets.nhle.com/logos/nhl/svg/{abbrev}_light.svg"
 HEADSHOT_FALLBACK_TEMPLATE = "https://assets.nhle.com/mugs/nhl/{season}/{abbrev}/{player_id}.png"

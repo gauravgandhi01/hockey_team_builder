@@ -31,6 +31,13 @@ TOTALS_METRIC_EXCLUSIONS = {
 }
 
 
+def decade_metric_exclusions(role: str, decade_start: int | None = None) -> set[str]:
+    exclusions: set[str] = set()
+    if role == "D" and decade_start is not None and decade_start < 2000:
+        exclusions.add("avgTimeOnIcePerGame")
+    return exclusions
+
+
 def map_letter_grade(score: float) -> str:
     for threshold, grade in GRADE_BANDS:
         if score >= threshold:
@@ -105,14 +112,17 @@ def _normalized_metric_weights(role: str, excluded_metrics: set[str] | None = No
     return {metric: weight / total_weight for metric, weight in filtered.items()}
 
 
-def totals_metric_weights(role: str) -> dict[str, float]:
-    return _normalized_metric_weights(role, TOTALS_METRIC_EXCLUSIONS.get(role))
+def totals_metric_weights(role: str, decade_start: int | None = None) -> dict[str, float]:
+    return _normalized_metric_weights(
+        role,
+        set(TOTALS_METRIC_EXCLUSIONS.get(role, set())) | decade_metric_exclusions(role, decade_start),
+    )
 
 
-def totals_metrics(role: str, stats: dict[str, Any] | None) -> dict[str, float]:
+def totals_metrics(role: str, stats: dict[str, Any] | None, decade_start: int | None = None) -> dict[str, float]:
     raw_stats = stats or {}
     totals: dict[str, float] = {}
-    for metric in totals_metric_weights(role):
+    for metric in totals_metric_weights(role, decade_start):
         if metric == "goalsAgainstAverageInverse":
             totals[metric] = _inverse_goals_against_average(raw_stats)
         else:
@@ -120,15 +130,15 @@ def totals_metrics(role: str, stats: dict[str, Any] | None) -> dict[str, float]:
     return totals
 
 
-def rate_metric_weights(role: str) -> dict[str, float]:
-    return _normalized_metric_weights(role)
+def rate_metric_weights(role: str, decade_start: int | None = None) -> dict[str, float]:
+    return _normalized_metric_weights(role, decade_metric_exclusions(role, decade_start))
 
 
-def rate_metrics(role: str, stats: dict[str, Any] | None) -> dict[str, float]:
+def rate_metrics(role: str, stats: dict[str, Any] | None, decade_start: int | None = None) -> dict[str, float]:
     raw_stats = stats or {}
     games_played = float(raw_stats.get("gamesPlayed") or 0)
     rates: dict[str, float] = {}
-    for metric in rate_metric_weights(role):
+    for metric in rate_metric_weights(role, decade_start):
         if metric == "goalsAgainstAverageInverse":
             rates[metric] = _inverse_goals_against_average(raw_stats)
         elif metric in PER_GAME_METRICS:
@@ -153,9 +163,13 @@ def _weighted_percentile_scores(
     return rounded, round(score, 1)
 
 
-def score_role_players(role: str, players: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    total_weights = totals_metric_weights(role)
-    rate_weights = rate_metric_weights(role)
+def score_role_players(
+    role: str,
+    players: list[dict[str, Any]],
+    decade_start: int | None = None,
+) -> dict[str, dict[str, Any]]:
+    total_weights = totals_metric_weights(role, decade_start)
+    rate_weights = rate_metric_weights(role, decade_start)
 
     totals_values = {
         metric: [player["totalsMetrics"][metric] for player in players]
