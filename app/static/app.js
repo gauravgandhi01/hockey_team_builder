@@ -58,6 +58,9 @@ const state = {
   loadingKind: null,
   error: null,
   shuffleFrame: null,
+  hardMode: false,
+  hardModeLocked: false,
+  rerollDrawUsed: false,
   rerollTeamUsed: false,
   rerollDecadeUsed: false,
   candidateFilter: "ALL",
@@ -71,6 +74,7 @@ const candidateFilters = document.getElementById("candidate-filters");
 const candidateGrid = document.getElementById("candidate-grid");
 const resultPanel = document.getElementById("result-panel");
 const statusBanner = document.getElementById("status-banner");
+const hardModeToggleButton = document.getElementById("hard-mode-toggle");
 const newRunButton = document.getElementById("new-run-button");
 const drawButton =
   document.getElementById("draw-matchup-button") ||
@@ -83,6 +87,12 @@ newRunButton.addEventListener("click", () => {
   startNewRun();
 });
 
+if (hardModeToggleButton) {
+  hardModeToggleButton.addEventListener("click", () => {
+    toggleHardMode();
+  });
+}
+
 if (drawButton) {
   drawButton.addEventListener("click", () => {
     drawTeamAndDecade();
@@ -90,7 +100,7 @@ if (drawButton) {
 }
 
 rerollTeamButton.addEventListener("click", () => {
-  rerollTeam();
+  handlePrimaryReroll();
 });
 
 rerollDecadeButton.addEventListener("click", () => {
@@ -115,6 +125,18 @@ function delay(ms) {
   return new Promise((resolve) => {
     window.setTimeout(resolve, ms);
   });
+}
+
+function canToggleHardMode() {
+  return !state.hardModeLocked && state.currentIndex === 0 && !state.currentDraw && !state.loadingKind && !state.result;
+}
+
+function toggleHardMode() {
+  if (!canToggleHardMode()) {
+    return;
+  }
+  state.hardMode = !state.hardMode;
+  render();
 }
 
 function initializeLineup() {
@@ -162,7 +184,7 @@ function randomShuffleFrame() {
 }
 
 function isShuffleLoadingKind(kind) {
-  return ["offer", "reroll-team", "reroll-decade"].includes(kind);
+  return ["offer", "reroll-team", "reroll-decade", "reroll-draw"].includes(kind);
 }
 
 function renderShuffleFrame() {
@@ -214,6 +236,9 @@ async function startNewRun() {
   state.loadingKind = null;
   state.error = null;
   state.shuffleFrame = null;
+  state.hardMode = false;
+  state.hardModeLocked = false;
+  state.rerollDrawUsed = false;
   state.rerollTeamUsed = false;
   state.rerollDecadeUsed = false;
   state.candidateFilter = "ALL";
@@ -239,6 +264,7 @@ async function requestDraw({ lockFranchiseAbbrev = null, lockDecade = null, excl
       apiPost("/api/game/draw", {
         openSlots: openSlots(),
         excludeCandidateKeys: selectedCandidateKeys(),
+        hardMode: state.hardMode,
         lockFranchiseAbbrev,
         lockDecade,
         excludePairKey,
@@ -246,6 +272,7 @@ async function requestDraw({ lockFranchiseAbbrev = null, lockDecade = null, excl
       delay(1100),
     ]);
     state.currentDraw = draw;
+    state.hardModeLocked = true;
     state.candidateFilter = "ALL";
     return true;
   } catch (error) {
@@ -263,6 +290,28 @@ async function requestDraw({ lockFranchiseAbbrev = null, lockDecade = null, excl
 
 async function drawTeamAndDecade() {
   await requestDraw();
+}
+
+async function handlePrimaryReroll() {
+  if (state.hardMode) {
+    await rerollDraw();
+    return;
+  }
+  await rerollTeam();
+}
+
+async function rerollDraw() {
+  if (!state.currentDraw || state.rerollDrawUsed) {
+    return;
+  }
+  const success = await requestDraw({
+    excludePairKey: state.currentDraw.pairKey,
+    loadingKind: "reroll-draw",
+  });
+  if (success) {
+    state.rerollDrawUsed = true;
+    render();
+  }
 }
 
 async function rerollTeam() {
@@ -360,6 +409,17 @@ function renderStatus() {
   statusBanner.textContent = "";
 }
 
+function renderHardModeToggle() {
+  if (!hardModeToggleButton) {
+    return;
+  }
+  hardModeToggleButton.textContent = state.hardMode ? "Hard Mode On" : "Hard Mode Off";
+  hardModeToggleButton.setAttribute("aria-pressed", state.hardMode ? "true" : "false");
+  hardModeToggleButton.disabled = !canToggleHardMode();
+  hardModeToggleButton.classList.toggle("active", state.hardMode);
+  hardModeToggleButton.classList.toggle("locked", state.hardModeLocked);
+}
+
 function renderActionButtons() {
   const noOpenSlots = !openSlots().length;
   const isGrading = state.result || state.loadingKind === "grade" || noOpenSlots;
@@ -377,6 +437,14 @@ function renderActionButtons() {
     drawButton.hidden = Boolean(state.currentDraw);
     drawButton.disabled = Boolean(state.loadingKind || state.currentDraw);
     drawButton.textContent = state.currentIndex === 0 ? "Draw Opening Team + Decade" : "Draw Next Team + Decade";
+  }
+
+  if (state.hardMode) {
+    rerollTeamButton.hidden = !state.currentDraw;
+    rerollTeamButton.disabled = Boolean(state.loadingKind || state.rerollDrawUsed);
+    rerollTeamButton.textContent = state.rerollDrawUsed ? "Reroll Used" : "Reroll Draw";
+    rerollDecadeButton.hidden = true;
+    return;
   }
 
   rerollTeamButton.hidden = !state.currentDraw;
@@ -522,12 +590,22 @@ function renderCandidateFilters() {
   });
 }
 
+function modeChipMarkup(extraClass = "") {
+  if (!state.hardMode) {
+    return "";
+  }
+  return `<span class="mode-chip${extraClass ? ` ${extraClass}` : ""}">Hard Mode</span>`;
+}
+
 function shuffleCardMarkup(frame) {
   return `
     <div class="team-card shuffling compact-card">
       <div class="shuffle-header">
         <p class="team-label">${state.loadingKind === "reroll-team" ? "Rerolling team" : state.loadingKind === "reroll-decade" ? "Rerolling decade" : "Drawing lineup options"}</p>
-        <span class="shuffle-chip">${frame.decade}</span>
+        <div class="shuffle-badges">
+          ${modeChipMarkup("in-draw")}
+          <span class="shuffle-chip">${frame.decade}</span>
+        </div>
       </div>
       <div class="shuffle-reel">
         <div class="shuffle-logo-shell">
@@ -547,7 +625,10 @@ function currentDrawMarkup(draw) {
   const secondaryNote = draw.historicalTeam.secondaryNote ? `<p class="historical-note">${draw.historicalTeam.secondaryNote}</p>` : "";
   return `
     <div class="team-card compact-card live-team-card">
-      <p class="team-label">Random draw</p>
+      <div class="draw-card-header">
+        <p class="team-label">Random draw</p>
+        ${modeChipMarkup("in-draw")}
+      </div>
       <div class="team-reveal">
         <img class="team-logo" src="${draw.historicalTeam.logo}" alt="${draw.historicalTeam.name} logo">
         <div>
@@ -593,6 +674,8 @@ function renderPrompt() {
       ? "Switching the team"
       : state.loadingKind === "reroll-decade"
         ? "Switching the decade"
+        : state.loadingKind === "reroll-draw"
+          ? "Redrawing team and decade"
         : "Shuffling team and decade";
     teamRoll.innerHTML = state.shuffleFrame ? shuffleCardMarkup(state.shuffleFrame) : "";
     renderCandidateFilters();
@@ -636,7 +719,7 @@ function renderPrompt() {
           </div>
           <h3>${candidate.fullName}</h3>
           <p class="candidate-meta">${candidate.historicalTeamName}</p>
-          <div class="candidate-stats">${candidateStatMarkup(candidate)}</div>
+          ${candidate.offerStats ? `<div class="candidate-stats">${candidateStatMarkup(candidate)}</div>` : ""}
           ${awardChipsMarkup(candidate.awards, "candidate-awards")}
         </div>
       </button>
@@ -755,7 +838,10 @@ function shareCardMarkup() {
     <section class="share-card" id="share-card">
       <div class="share-card-header">
         <div>
-          <p class="panel-kicker">Share Card</p>
+          <div class="share-kicker-row">
+            <p class="panel-kicker">Share Card</p>
+            ${modeChipMarkup("in-results")}
+          </div>
           <div class="share-brand-row">
             <img class="share-brand-logo" src="/static/logo.png" alt="linecraft logo">
           </div>
@@ -803,6 +889,7 @@ function renderResults() {
 }
 
 function render() {
+  renderHardModeToggle();
   renderStatus();
   renderActionButtons();
   renderLineup();

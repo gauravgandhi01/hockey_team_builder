@@ -68,6 +68,7 @@ def create_app(service: NhlApiService | None = None, start_background_prewarm: b
         return await nhl_service.get_random_draw(
             payload.openSlots,
             payload.excludeCandidateKeys,
+            hard_mode=payload.hardMode,
             lock_franchise_abbrev=payload.lockFranchiseAbbrev,
             lock_decade=payload.lockDecade,
             exclude_pair_key=payload.excludePairKey,

@@ -313,6 +313,29 @@ def test_draw_endpoint_returns_wsh_2000s_candidates_sorted_by_games_played(tmp_p
     ]
 
 
+def test_draw_endpoint_hard_mode_hides_hints_and_sorts_alphabetically(tmp_path: Path):
+    transport = MockHistoricalApi()
+    with create_test_client(tmp_path / "cache.sqlite3", transport) as client:
+        response = client.post(
+            "/api/game/draw",
+            json={
+                "openSlots": ["C", "W", "W", "D", "G"],
+                "excludeCandidateKeys": [],
+                "hardMode": True,
+                "lockFranchiseAbbrev": "WSH",
+                "lockDecade": "2000s",
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["hardMode"] is True
+    assert [entry["playerId"] for entry in body["candidates"]] == [100, 102, 104, 105, 103, 101]
+    assert all(entry["offerStats"] is None for entry in body["candidates"])
+    assert all(entry["ratingTier"] is None for entry in body["candidates"])
+    assert all(entry["awards"] == [] for entry in body["candidates"])
+
+
 def test_repeated_draw_uses_persisted_team_decade_pool_without_new_network_fetch(tmp_path: Path):
     store_path = tmp_path / "cache.sqlite3"
     first_transport = MockHistoricalApi()
@@ -354,6 +377,25 @@ def test_repeated_draw_uses_persisted_team_decade_pool_without_new_network_fetch
         count for url, count in second_transport.calls.items() if url.endswith("/site/api/award-details")
     )
     assert second_award_calls == 0
+
+
+def test_hard_mode_draw_can_redraw_to_a_different_pair(tmp_path: Path):
+    transport = MockHistoricalApi()
+    with create_test_client(tmp_path / "cache.sqlite3", transport) as client:
+        response = client.post(
+            "/api/game/draw",
+            json={
+                "openSlots": ["C", "W", "D", "G"],
+                "excludeCandidateKeys": [],
+                "hardMode": True,
+                "excludePairKey": "WSH:2000s",
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["hardMode"] is True
+    assert body["pairKey"] != "WSH:2000s"
 
 
 def test_historical_branding_resolves_predecessor_franchises(tmp_path: Path):

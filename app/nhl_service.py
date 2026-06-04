@@ -719,6 +719,7 @@ class NhlApiService:
         self,
         available_slots: list[str],
         exclude_candidate_keys: list[str],
+        hard_mode: bool = False,
         lock_franchise_abbrev: str | None = None,
         lock_decade: str | None = None,
         exclude_pair_key: str | None = None,
@@ -783,23 +784,33 @@ class NhlApiService:
                         "historicalTeamAbbrev": candidate["historicalTeamAbbrev"],
                         "historicalTeamName": candidate["historicalTeamName"],
                         "historicalTeamLogo": candidate["historicalTeamLogo"],
-                        "ratingTier": scored.get("ratingTier") if scored is not None else None,
-                        "awards": candidate.get("awards", []),
-                        "offerStats": decade_offer_stats(candidate),
+                        "ratingTier": None if hard_mode else (scored.get("ratingTier") if scored is not None else None),
+                        "awards": [] if hard_mode else candidate.get("awards", []),
+                        "offerStats": None if hard_mode else decade_offer_stats(candidate),
                     }
                 )
             if not candidates:
                 continue
 
-            candidates.sort(
-                key=lambda candidate: (
-                    -eligible_games_played[candidate["candidateKey"]],
-                    SLOT_SORT_ORDER[candidate["eligibleSlot"]],
-                    candidate["fullName"],
+            if hard_mode:
+                candidates.sort(
+                    key=lambda candidate: (
+                        candidate["fullName"],
+                        SLOT_SORT_ORDER[candidate["eligibleSlot"]],
+                        candidate["playerId"],
+                    )
                 )
-            )
+            else:
+                candidates.sort(
+                    key=lambda candidate: (
+                        -eligible_games_played[candidate["candidateKey"]],
+                        SLOT_SORT_ORDER[candidate["eligibleSlot"]],
+                        candidate["fullName"],
+                    )
+                )
             return {
                 "pairKey": pair["pairKey"],
+                "hardMode": hard_mode,
                 "modernFranchise": pair["modernFranchise"],
                 "historicalTeam": pair["historicalTeam"],
                 "decade": pair["decadeLabel"],
