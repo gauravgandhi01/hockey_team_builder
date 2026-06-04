@@ -118,6 +118,6 @@ GOALIE_RATING_CURVE_HIGH = 99.0
 GOALIE_RATING_CURVE_EXPONENT = 1.1
 PROJECTED_OTL = 8
 SCHEMA_VERSION = "historical-cache-v2"
-SCORING_VERSION = "historical-hybrid-70-30-v14"
+SCORING_VERSION = "historical-hybrid-70-30-v15"
 LOGO_URL_TEMPLATE = "https://assets.nhle.com/logos/nhl/svg/{abbrev}_light.svg"
 HEADSHOT_FALLBACK_TEMPLATE = "https://assets.nhle.com/mugs/nhl/{season}/{abbrev}/{player_id}.png"

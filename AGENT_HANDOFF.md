@@ -821,6 +821,6 @@ Covers:
 ## Current Version Markers
 At time of this handoff:
 - `SCHEMA_VERSION = historical-cache-v2`
-- `SCORING_VERSION = historical-hybrid-70-30-v14`
+- `SCORING_VERSION = historical-hybrid-70-30-v15`
 
 Any scoring change that affects derived team-decade pools or leaderboards should usually bump `SCORING_VERSION` so stale SQLite-derived payloads are not reused.
