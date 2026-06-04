@@ -27,7 +27,6 @@
         <div class="hero-summary">
           <div class="summary-chip">6 picks</div>
           <div class="summary-chip">1980s to 2020s</div>
-          <button id="hard-mode-toggle" class="summary-chip summary-toggle" type="button" aria-pressed="false">Hard Mode Off</button>
           <button id="new-run-button" class="summary-chip summary-action" type="button">Start Over Run</button>
         </div>
       </header>
@@ -53,6 +52,10 @@
           </div>
 
           <div id="status-banner" class="status-banner" hidden></div>
+          <div class="mode-toggle-row">
+            <button id="hard-mode-toggle" class="summary-chip summary-toggle mode-toggle-button" type="button" aria-pressed="false">Hard Mode Off</button>
+            <button id="twenties-mode-toggle" class="summary-chip summary-toggle mode-toggle-button" type="button" aria-pressed="false">2020s Mode Off</button>
+          </div>
           <div class="prompt-actions">
             <button id="draw-matchup-button" class="action-button" type="button">Draw Opening Team + Decade</button>
             <button id="reroll-team-button" class="ghost-button secondary-action" type="button" hidden>Reroll Team</button>

@@ -1,4 +1,6 @@
 const SLOT_SEQUENCE = ["C", "W", "W", "D", "D", "G"];
+const RUN_HISTORY_STORAGE_KEY = "linecraft_run_history_v1";
+const RUN_HISTORY_LIMIT = 8;
 const SLOT_LABELS = {
   C: "Center",
   W: "Winger",
@@ -53,6 +55,7 @@ const SHUFFLE_TEAMS = [
 const state = {
   lineup: [],
   acceptedBoards: [],
+  runHistory: [],
   currentIndex: 0,
   currentDraw: null,
   result: null,
@@ -65,6 +68,8 @@ const state = {
   shuffleFrame: null,
   hardMode: false,
   hardModeLocked: false,
+  twentiesMode: false,
+  twentiesModeLocked: false,
   rerollDrawUsed: false,
   rerollTeamUsed: false,
   rerollDecadeUsed: false,
@@ -80,7 +85,9 @@ const candidateGrid = document.getElementById("candidate-grid");
 const resultPanel = document.getElementById("result-panel");
 const statusBanner = document.getElementById("status-banner");
 const hardModeToggleButton = document.getElementById("hard-mode-toggle");
+const twentiesModeToggleButton = document.getElementById("twenties-mode-toggle");
 const newRunButton = document.getElementById("new-run-button");
+const promptActions = document.querySelector(".prompt-actions");
 const drawButton =
   document.getElementById("draw-matchup-button") ||
   document.getElementById("draw-draw-button");
@@ -95,6 +102,12 @@ newRunButton.addEventListener("click", () => {
 if (hardModeToggleButton) {
   hardModeToggleButton.addEventListener("click", () => {
     toggleHardMode();
+  });
+}
+
+if (twentiesModeToggleButton) {
+  twentiesModeToggleButton.addEventListener("click", () => {
+    toggleTwentiesMode();
   });
 }
 
@@ -132,15 +145,81 @@ function delay(ms) {
   });
 }
 
-function canToggleHardMode() {
-  return !state.hardModeLocked && state.currentIndex === 0 && !state.currentDraw && !state.loadingKind && !state.result;
+function loadRunHistory() {
+  try {
+    const raw = window.localStorage.getItem(RUN_HISTORY_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_error) {
+    return [];
+  }
+}
+
+function persistRunHistory(entries) {
+  state.runHistory = entries;
+  try {
+    window.localStorage.setItem(RUN_HISTORY_STORAGE_KEY, JSON.stringify(entries));
+  } catch (_error) {
+    // Ignore storage failures; history is a UX enhancement only.
+  }
+}
+
+function recordRunHistory(result) {
+  if (!result) {
+    return;
+  }
+  const breakdown = result.lineupBreakdown || [];
+  const entry = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    savedAt: new Date().toISOString(),
+    hardMode: state.hardMode,
+    twentiesMode: state.twentiesMode,
+    letterGrade: result.letterGrade,
+    totalScore: result.totalScore,
+    decades: [...new Set(breakdown.map((item) => item.decade))],
+    picks: breakdown.map((item) => ({
+      slot: item.slot,
+      fullName: item.fullName,
+      teamAbbrev: item.teamAbbrev,
+      decade: item.decade,
+    })),
+  };
+  const nextHistory = [entry, ...loadRunHistory()].slice(0, RUN_HISTORY_LIMIT);
+  persistRunHistory(nextHistory);
+}
+
+function clearRunHistory() {
+  persistRunHistory([]);
+  renderResults();
+}
+
+function canToggleRunModes() {
+  return (
+    !state.hardModeLocked &&
+    !state.twentiesModeLocked &&
+    state.currentIndex === 0 &&
+    !state.currentDraw &&
+    !state.loadingKind &&
+    !state.result
+  );
 }
 
 function toggleHardMode() {
-  if (!canToggleHardMode()) {
+  if (!canToggleRunModes()) {
     return;
   }
   state.hardMode = !state.hardMode;
+  render();
+}
+
+function toggleTwentiesMode() {
+  if (!canToggleRunModes()) {
+    return;
+  }
+  state.twentiesMode = !state.twentiesMode;
   render();
 }
 
@@ -236,6 +315,7 @@ function startShuffleAnimation() {
 async function startNewRun() {
   initializeLineup();
   state.acceptedBoards = [];
+  state.runHistory = loadRunHistory();
   state.currentIndex = 0;
   state.currentDraw = null;
   state.result = null;
@@ -248,6 +328,8 @@ async function startNewRun() {
   state.shuffleFrame = null;
   state.hardMode = false;
   state.hardModeLocked = false;
+  state.twentiesMode = false;
+  state.twentiesModeLocked = false;
   state.rerollDrawUsed = false;
   state.rerollTeamUsed = false;
   state.rerollDecadeUsed = false;
@@ -268,6 +350,7 @@ async function requestDraw({ lockFranchiseAbbrev = null, lockDecade = null, excl
   render();
 
   const stopShuffle = startShuffleAnimation();
+  const effectiveLockDecade = state.twentiesMode ? "2020s" : lockDecade;
 
   try {
     const [draw] = await Promise.all([
@@ -276,13 +359,14 @@ async function requestDraw({ lockFranchiseAbbrev = null, lockDecade = null, excl
         excludeCandidateKeys: selectedCandidateKeys(),
         hardMode: state.hardMode,
         lockFranchiseAbbrev,
-        lockDecade,
+        lockDecade: effectiveLockDecade,
         excludePairKey,
       }),
       delay(1100),
     ]);
     state.currentDraw = draw;
     state.hardModeLocked = true;
+    state.twentiesModeLocked = true;
     state.candidateFilter = "ALL";
     return true;
   } catch (error) {
@@ -405,6 +489,7 @@ async function gradeLineup() {
         candidateKey: entry.pick.candidateKey,
       })),
     });
+    recordRunHistory(state.result);
   } catch (error) {
     state.error = error.message;
   } finally {
@@ -462,14 +547,26 @@ function renderHardModeToggle() {
   }
   hardModeToggleButton.textContent = state.hardMode ? "Hard Mode On" : "Hard Mode Off";
   hardModeToggleButton.setAttribute("aria-pressed", state.hardMode ? "true" : "false");
-  hardModeToggleButton.disabled = !canToggleHardMode();
+  hardModeToggleButton.disabled = !canToggleRunModes();
   hardModeToggleButton.classList.toggle("active", state.hardMode);
-  hardModeToggleButton.classList.toggle("locked", state.hardModeLocked);
+  hardModeToggleButton.classList.toggle("locked", !canToggleRunModes());
+}
+
+function renderTwentiesModeToggle() {
+  if (!twentiesModeToggleButton) {
+    return;
+  }
+  twentiesModeToggleButton.textContent = state.twentiesMode ? "2020s Mode On" : "2020s Mode Off";
+  twentiesModeToggleButton.setAttribute("aria-pressed", state.twentiesMode ? "true" : "false");
+  twentiesModeToggleButton.disabled = !canToggleRunModes();
+  twentiesModeToggleButton.classList.toggle("active", state.twentiesMode);
+  twentiesModeToggleButton.classList.toggle("locked", !canToggleRunModes());
 }
 
 function renderActionButtons() {
   const noOpenSlots = !openSlots().length;
   const isGrading = state.result || state.loadingKind === "grade" || noOpenSlots;
+  const showStartState = !state.result && !state.loadingKind && !state.currentDraw && state.currentIndex === 0;
 
   if (isGrading) {
     if (drawButton) {
@@ -483,7 +580,18 @@ function renderActionButtons() {
   if (drawButton) {
     drawButton.hidden = Boolean(state.currentDraw);
     drawButton.disabled = Boolean(state.loadingKind || state.currentDraw);
-    drawButton.textContent = state.currentIndex === 0 ? "Draw Opening Team + Decade" : "Draw Next Team + Decade";
+    if (state.currentIndex === 0) {
+      drawButton.textContent = "Start Game";
+    } else if (state.twentiesMode) {
+      drawButton.textContent = "Draw Next 2020s Team";
+    } else {
+      drawButton.textContent = "Draw Next Team + Decade";
+    }
+    drawButton.classList.toggle("start-game-button", showStartState);
+  }
+
+  if (promptActions) {
+    promptActions.classList.toggle("start-state", showStartState);
   }
 
   if (state.hardMode) {
@@ -498,7 +606,7 @@ function renderActionButtons() {
   rerollTeamButton.disabled = Boolean(state.loadingKind || state.rerollTeamUsed);
   rerollTeamButton.textContent = state.rerollTeamUsed ? "Team Reroll Used" : "Reroll Team";
 
-  rerollDecadeButton.hidden = !state.currentDraw;
+  rerollDecadeButton.hidden = !state.currentDraw || state.twentiesMode;
   rerollDecadeButton.disabled = Boolean(state.loadingKind || state.rerollDecadeUsed);
   rerollDecadeButton.textContent = state.rerollDecadeUsed ? "Decade Reroll Used" : "Reroll Decade";
 }
@@ -637,17 +745,50 @@ function renderCandidateFilters() {
 }
 
 function modeChipMarkup(extraClass = "") {
-  if (!state.hardMode) {
+  const chips = [];
+  if (state.hardMode) {
+    chips.push(`<span class="mode-chip${extraClass ? ` ${extraClass}` : ""}">Hard Mode</span>`);
+  }
+  if (state.twentiesMode) {
+    chips.push(`<span class="mode-chip${extraClass ? ` ${extraClass}` : ""}">2020s Mode</span>`);
+  }
+  return chips.join("");
+}
+
+function hardModeShareNoteMarkup() {
+  const notes = [];
+  if (state.hardMode) {
+    notes.push("Blind draft run");
+  }
+  if (state.twentiesMode) {
+    notes.push("2020s-only run");
+  }
+  if (!notes.length) {
     return "";
   }
-  return `<span class="mode-chip${extraClass ? ` ${extraClass}` : ""}">Hard Mode</span>`;
+  if (state.hardMode && state.twentiesMode) {
+    return `<p class="share-mode-note">Blind draft run · locked to 2020s draws.</p>`;
+  }
+  if (state.hardMode) {
+    return `<p class="share-mode-note">Blind draft run · player stats, tiers, and awards were hidden during picks.</p>`;
+  }
+  return `<p class="share-mode-note">Locked to 2020s draws for the full run.</p>`;
 }
 
 function shuffleCardMarkup(frame) {
+  const loadingLabel = state.loadingKind === "reroll-team"
+    ? "Rerolling team"
+    : state.loadingKind === "reroll-decade"
+      ? "Rerolling decade"
+      : state.loadingKind === "reroll-draw"
+        ? "Redrawing team and decade"
+        : state.twentiesMode
+          ? "Drawing 2020s lineup options"
+          : "Drawing lineup options";
   return `
     <div class="team-card shuffling compact-card">
       <div class="shuffle-header">
-        <p class="team-label">${state.loadingKind === "reroll-team" ? "Rerolling team" : state.loadingKind === "reroll-decade" ? "Rerolling decade" : "Drawing lineup options"}</p>
+        <p class="team-label">${loadingLabel}</p>
         <div class="shuffle-badges">
           ${modeChipMarkup("in-draw")}
           <span class="shuffle-chip">${frame.decade}</span>
@@ -730,7 +871,11 @@ function renderPrompt() {
   }
 
   if (!state.currentDraw) {
-    promptTitle.textContent = state.currentIndex === 0 ? "Draw your opening franchise and decade" : "Draw your next franchise and decade";
+    if (state.twentiesMode) {
+      promptTitle.textContent = state.currentIndex === 0 ? "Draw your opening 2020s team" : "Draw your next 2020s team";
+    } else {
+      promptTitle.textContent = state.currentIndex === 0 ? "Draw your opening franchise and decade" : "Draw your next franchise and decade";
+    }
     teamRoll.innerHTML = "";
     renderCandidateFilters();
     candidateGrid.innerHTML = "";
@@ -881,7 +1026,7 @@ function shareCardMarkup() {
   const decades = [...new Set(breakdown.map((entry) => entry.decade))].join(" • ");
 
   return `
-    <section class="share-card" id="share-card">
+    <section class="share-card${state.hardMode ? " hard-mode-share-card" : ""}" id="share-card">
       <div class="share-card-header">
         <div>
           <div class="share-kicker-row">
@@ -892,6 +1037,7 @@ function shareCardMarkup() {
             <img class="share-brand-logo" src="/static/logo.png" alt="linecraft logo">
           </div>
           <p class="share-card-subtitle">${decades}</p>
+          ${hardModeShareNoteMarkup()}
         </div>
         <div class="share-grade-block">
           <span class="share-grade-pill">${state.result.letterGrade}</span>
@@ -920,6 +1066,53 @@ function shareCardMarkup() {
       </div>
       <div class="share-card-footer">
         <span class="share-card-url">linecraft.lol</span>
+      </div>
+    </section>
+  `;
+}
+
+function formatHistoryTimestamp(value) {
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date(value));
+  } catch (_error) {
+    return value;
+  }
+}
+
+function runHistoryMarkup() {
+  const history = state.runHistory || [];
+  if (!history.length) {
+    return "";
+  }
+  return `
+    <section class="run-history-card compact-card">
+      <div class="run-history-header">
+        <div>
+          <p class="panel-kicker">Recent Runs</p>
+          <h3>Stored on this device</h3>
+        </div>
+        <button id="clear-history-button" class="ghost-button history-clear-button" type="button">Clear</button>
+      </div>
+      <div class="run-history-list">
+        ${history.map((entry) => `
+          <article class="run-history-row">
+            <div class="run-history-main">
+              <div class="run-history-topline">
+                <span class="run-history-grade">${entry.letterGrade}</span>
+                <strong>${entry.totalScore}</strong>
+                ${entry.hardMode ? '<span class="run-history-mode">Hard Mode</span>' : ""}
+                ${entry.twentiesMode ? '<span class="run-history-mode">2020s Mode</span>' : ""}
+              </div>
+              <span class="run-history-decades">${(entry.decades || []).join(" • ")}</span>
+            </div>
+            <span class="run-history-time">${formatHistoryTimestamp(entry.savedAt)}</span>
+          </article>
+        `).join("")}
       </div>
     </section>
   `;
@@ -999,6 +1192,7 @@ function renderResults() {
     ${shareCardMarkup()}
     ${bestPossibleControlsMarkup()}
     ${bestPossibleMarkup()}
+    ${runHistoryMarkup()}
   `;
 
   const bestPossibleButton = document.getElementById("best-possible-button");
@@ -1007,10 +1201,17 @@ function renderResults() {
       await toggleBestPossible();
     });
   }
+  const clearHistoryButton = document.getElementById("clear-history-button");
+  if (clearHistoryButton) {
+    clearHistoryButton.addEventListener("click", () => {
+      clearRunHistory();
+    });
+  }
 }
 
 function render() {
   renderHardModeToggle();
+  renderTwentiesModeToggle();
   renderStatus();
   renderActionButtons();
   renderLineup();

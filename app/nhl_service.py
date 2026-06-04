@@ -53,6 +53,33 @@ ADMIN_SCORE_BUCKETS = [
 ]
 
 
+def summarize_draw_provenance(pool_source: str, leaderboard_sources: dict[str, str]) -> dict[str, Any]:
+    sources = [pool_source, *leaderboard_sources.values()]
+    if "fresh" in sources:
+        return {
+            "kind": "fresh",
+            "label": "Built fresh",
+            "message": "Built this draw from live NHL history. Next time it should load faster.",
+            "poolSource": pool_source,
+            "leaderboardSources": leaderboard_sources,
+        }
+    if "sqlite" in sources:
+        return {
+            "kind": "sqlite",
+            "label": "Disk cache",
+            "message": "Loaded this draw from local disk cache.",
+            "poolSource": pool_source,
+            "leaderboardSources": leaderboard_sources,
+        }
+    return {
+        "kind": "memory",
+        "label": "Hot cache",
+        "message": "Loaded this draw from in-memory cache.",
+        "poolSource": pool_source,
+        "leaderboardSources": leaderboard_sources,
+    }
+
+
 def logo_url(abbrev: str) -> str:
     return LOGO_URL_TEMPLATE.format(abbrev=abbrev)
 
@@ -536,6 +563,21 @@ class NhlApiService:
             self._leaderboard_locks[key] = lock
         return lock
 
+    def _team_decade_pool_source(self, pair_key: str) -> str:
+        if pair_key in self._pair_pool_cache:
+            return "memory"
+        if self.store.get_team_decade_pool(pair_key, SCORING_VERSION) is not None:
+            return "sqlite"
+        return "fresh"
+
+    def _leaderboard_source(self, decade_start: int, role: str) -> str:
+        cache_key = (decade_start, role)
+        if cache_key in self._leaderboard_cache:
+            return "memory"
+        if self.store.get_decade_role_leaderboard(decade_start, role, SCORING_VERSION) is not None:
+            return "sqlite"
+        return "fresh"
+
     async def get_team_season_stats(
         self,
         team_code: str,
@@ -822,6 +864,7 @@ class NhlApiService:
         open_slot_set = set(available_slots)
 
         for pair in self.rng.sample(filtered_pairs, len(filtered_pairs)):
+            pool_source = self._team_decade_pool_source(pair["pairKey"])
             pool = await self.get_team_decade_pool(pair["pairKey"])
             eligible = [
                 candidate
@@ -832,6 +875,10 @@ class NhlApiService:
                 continue
 
             eligible_roles = sorted({candidate["eligibleSlot"] for candidate in eligible}, key=ROLE_ORDER.index)
+            leaderboard_sources = {
+                role: self._leaderboard_source(pair["decadeStart"], role)
+                for role in eligible_roles
+            }
             role_leaderboards = {
                 role: leaderboard
                 for role, leaderboard in zip(
@@ -892,6 +939,7 @@ class NhlApiService:
                 "decade": pair["decadeLabel"],
                 "seasonRange": pair["seasonRange"],
                 "availableSlots": available_slots,
+                "provenance": summarize_draw_provenance(pool_source, leaderboard_sources),
                 "candidates": candidates,
             }
 
