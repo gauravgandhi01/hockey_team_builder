@@ -736,34 +736,211 @@ button {
 
 @media (max-width: 640px) {
   .page-shell {
-    width: min(100% - 20px, 100%);
-    padding-top: 14px;
+    width: min(100% - 14px, 100%);
+    padding-top: 10px;
+    padding-bottom: 14px;
   }
 
   .panel {
-    padding: 13px;
+    padding: 11px;
+  }
+
+  .hero {
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .hero h1 {
+    font-size: clamp(1.9rem, 10vw, 2.5rem);
+  }
+
+  .hero-text {
+    display: none;
+  }
+
+  .hero-summary {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 6px;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .hero-summary::-webkit-scrollbar {
+    display: none;
+  }
+
+  .summary-chip {
+    white-space: nowrap;
+    padding: 5px 8px;
+    font-size: 0.72rem;
+  }
+
+  .layout {
+    gap: 10px;
   }
 
   .panel-header,
   .result-header,
-  .slot-topline,
   .result-player,
-  .team-reveal,
-  .shuffle-reel,
   .result-toolbar,
-  .share-card-header,
-  .share-slot-row {
+  .share-card-header {
     align-items: flex-start;
     grid-template-columns: 1fr;
     flex-direction: column;
   }
 
+  .panel-header h2,
+  .result-header h3 {
+    font-size: 1.18rem;
+  }
+
+  .lineup-panel .panel-header {
+    gap: 6px;
+  }
+
+  .lineup-board {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(138px, 1fr);
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 4px;
+    margin-top: 8px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+  }
+
+  .lineup-board::-webkit-scrollbar {
+    display: none;
+  }
+
+  .lineup-slot {
+    min-height: 94px;
+    padding: 10px;
+    scroll-snap-align: start;
+  }
+
+  .slot-topline {
+    align-items: center;
+  }
+
+  .picked-player {
+    gap: 7px;
+    margin-top: 7px;
+  }
+
+  .picked-player img {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+  }
+
+  .picked-player h3 {
+    font-size: 0.9rem;
+  }
+
+  .picked-player p,
+  .slot-empty {
+    font-size: 0.7rem;
+  }
+
+  .prompt-actions {
+    gap: 5px;
+    margin-top: 8px;
+  }
+
+  .action-button,
+  .ghost-button,
+  .secondary-action {
+    padding: 8px 10px;
+    font-size: 0.76rem;
+  }
+
+  .turn-indicator {
+    padding: 6px 9px;
+    font-size: 0.72rem;
+  }
+
+  .team-card {
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .team-card h3,
+  .result-callout h3 {
+    font-size: clamp(1.3rem, 8vw, 1.8rem);
+  }
+
+  .team-reveal,
+  .shuffle-reel {
+    grid-template-columns: 48px 1fr;
+    gap: 8px;
+  }
+
+  .team-logo,
+  .shuffle-logo {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    padding: 7px;
+  }
+
   .candidate-grid {
     grid-template-columns: 1fr;
+    gap: 6px;
+    margin-top: 8px;
+    max-height: min(56vh, 420px);
+    overflow-y: auto;
+    padding-right: 3px;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  .candidate-card {
+    grid-template-columns: 44px 1fr;
+    gap: 7px;
+    padding: 8px;
+  }
+
+  .candidate-card img {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+  }
+
+  .candidate-card h3 {
+    font-size: 0.88rem;
+  }
+
+  .candidate-meta,
+  .candidate-position {
+    font-size: 0.68rem;
+  }
+
+  .candidate-stats span {
+    padding: 3px 5px;
+    font-size: 0.62rem;
   }
 
   .result-summary-stack,
   .share-grade-block {
     align-items: flex-start;
+  }
+
+  .result-score,
+  .share-grade {
+    font-size: 1.7rem;
+  }
+
+  .share-slot-row {
+    align-items: flex-start;
+    grid-template-columns: auto 1fr;
+  }
+
+  .share-slot-score {
+    justify-self: flex-end;
   }
 }
