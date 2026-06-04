@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NHL Builder</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/styles.css">
+    <script defer src="/static/app.js"></script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Historical Franchise Mode</p>
+          <h1>NHL Builder</h1>
+          <p class="hero-text">
+            Build a six-slot lineup from random NHL franchise-and-decade draws, then get graded against players from that same era.
+          </p>
+        </div>
+        <div class="hero-summary">
+          <div class="summary-chip">6 picks</div>
+          <div class="summary-chip">1980s to 2020s</div>
+          <div class="summary-chip">Persistent cache</div>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="panel lineup-panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-kicker">Lineup</p>
+              <h2>Your card</h2>
+            </div>
+            <button id="new-run-button" class="ghost-button" type="button">Start New Run</button>
+          </div>
+          <div id="lineup-board" class="lineup-board"></div>
+        </section>
+
+        <section class="panel gameplay-panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-kicker">Current pick</p>
+              <h2 id="prompt-title">Loading…</h2>
+            </div>
+            <div id="turn-indicator" class="turn-indicator"></div>
+          </div>
+
+          <div id="status-banner" class="status-banner" hidden></div>
+          <div class="prompt-actions">
+            <button id="draw-matchup-button" class="action-button" type="button">Draw Opening Team + Decade</button>
+            <button id="reroll-team-button" class="ghost-button secondary-action" type="button" hidden>Reroll Team</button>
+            <button id="reroll-decade-button" class="ghost-button secondary-action" type="button" hidden>Reroll Decade</button>
+          </div>
+          <div id="team-roll" class="team-roll"></div>
+          <div id="candidate-grid" class="candidate-grid"></div>
+          <div id="result-panel" class="result-panel"></div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
