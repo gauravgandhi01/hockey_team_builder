@@ -107,6 +107,7 @@ def decade_offer_stats(candidate: dict[str, Any]) -> dict[str, Any]:
         return {
             "points": stats.get("points", 0),
             "assists": stats.get("assists", 0),
+            "avgTimeOnIcePerGame": stats.get("avgTimeOnIcePerGame", 0),
             "shots": stats.get("shots", 0),
         }
     return {
@@ -411,13 +412,17 @@ class NhlApiService:
                                 "assists": 0,
                                 "points": 0,
                                 "shots": 0,
+                                "avgTimeOnIcePerGameWeighted": 0.0,
                             },
                         },
                     )
                     games_played = int(player.get("gamesPlayed") or 0)
                     aggregate["positionGames"][player.get("positionCode", "")] += games_played
-                    for metric in aggregate["stats"]:
+                    for metric in ("gamesPlayed", "goals", "assists", "points", "shots"):
                         aggregate["stats"][metric] += float(player.get(metric) or 0)
+                    aggregate["stats"]["avgTimeOnIcePerGameWeighted"] += (
+                        float(player.get("avgTimeOnIcePerGame") or 0) * games_played
+                    )
 
                 for player in stats.get("goalies", []):
                     player_id = int(player["playerId"])
@@ -454,9 +459,19 @@ class NhlApiService:
                 slot = slot_for_position_code(position_code)
                 if slot is None:
                     continue
+                games_played = aggregate["stats"]["gamesPlayed"]
                 stats = {
-                    key: int(value) if float(value).is_integer() else round(float(value), 3)
-                    for key, value in aggregate["stats"].items()
+                    "gamesPlayed": int(games_played),
+                    "goals": int(aggregate["stats"]["goals"]),
+                    "assists": int(aggregate["stats"]["assists"]),
+                    "points": int(aggregate["stats"]["points"]),
+                    "shots": int(aggregate["stats"]["shots"]),
+                    "avgTimeOnIcePerGame": round(
+                        aggregate["stats"]["avgTimeOnIcePerGameWeighted"] / games_played,
+                        3,
+                    )
+                    if games_played
+                    else 0.0,
                 }
                 candidate = {
                     "candidateKey": make_candidate_key(pair_key, aggregate["playerId"], slot),
@@ -713,6 +728,7 @@ class NhlApiService:
                     "positionCode": candidate["positionCode"],
                     "headshot": candidate["headshot"],
                     "score": scored["score"],
+                    "rawScore": scored["rawScore"],
                     "totalsScore": scored["totalsScore"],
                     "rateScore": scored["rateScore"],
                     "metricPercentiles": {

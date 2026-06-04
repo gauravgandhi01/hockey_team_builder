@@ -45,8 +45,9 @@ ROLE_CONFIG = {
     "D": {
         "eligible_positions": {"D"},
         "weights": {
-            "points": 0.35,
+            "points": 0.25,
             "assists": 0.20,
+            "avgTimeOnIcePerGame": 0.40,
             "shots": 0.15,
         },
     },
@@ -80,8 +81,13 @@ GRADE_BANDS = [
 MIN_DECADE_GAMES = 100
 HYBRID_TOTALS_WEIGHT = 0.70
 HYBRID_RATES_WEIGHT = 0.30
+RATING_CURVE_FLOOR_RAW = 85.0
+RATING_CURVE_LOW = 40.0
+RATING_CURVE_MID = 70.0
+RATING_CURVE_HIGH = 99.0
+RATING_CURVE_EXPONENT = 1.6
 PROJECTED_OTL = 8
 SCHEMA_VERSION = "historical-cache-v1"
-SCORING_VERSION = "historical-hybrid-70-30-v3"
+SCORING_VERSION = "historical-hybrid-70-30-v7"
 LOGO_URL_TEMPLATE = "https://assets.nhle.com/logos/nhl/svg/{abbrev}_light.svg"
 HEADSHOT_FALLBACK_TEMPLATE = "https://assets.nhle.com/mugs/nhl/{season}/{abbrev}/{player_id}.png"

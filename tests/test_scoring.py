@@ -1,5 +1,6 @@
 from app.nhl_service import format_season_display, make_candidate_key, parse_candidate_key, primary_position_code, slot_for_position_code
 from app.scoring import (
+    curve_rating,
     map_letter_grade,
     percentile_rank,
     project_record,
@@ -55,6 +56,13 @@ def test_project_record_uses_simple_hockey_projection():
     }
 
 
+def test_curve_rating_spreads_top_end_and_keeps_full_scale():
+    assert curve_rating(99.8, 99.8) == 99.0
+    assert curve_rating(85.0, 99.8) == 70.0
+    assert curve_rating(42.5, 99.8) == 55.0
+    assert curve_rating(98.0, 99.8) == 93.6
+
+
 def test_rate_metrics_use_per_game_counts():
     stats = {"gamesPlayed": 50, "points": 100, "assists": 50, "goals": 25, "shots": 200}
     metrics = rate_metrics("C", stats)
@@ -78,6 +86,13 @@ def test_role_metric_weights_do_not_include_plus_minus():
     assert "plusMinus" not in defense_total_weights
     assert "plusMinus" not in winger_weights
     assert "plusMinus" not in defense_weights
+
+
+def test_defense_time_on_ice_is_rate_only():
+    defense_total_weights = totals_metric_weights("D")
+    defense_rate_weights = rate_metric_weights("D")
+    assert "avgTimeOnIcePerGame" not in defense_total_weights
+    assert "avgTimeOnIcePerGame" in defense_rate_weights
 
 
 def test_totals_metric_weights_drop_goalie_efficiency_metrics():
@@ -130,6 +145,9 @@ def test_score_role_players_builds_hybrid_scores():
 
     scored = score_role_players("C", players)
     assert scored["AAA:2000s:1:C"]["score"] > scored["AAA:2000s:2:C"]["score"]
+    assert scored["AAA:2000s:1:C"]["rawScore"] == 100.0
+    assert scored["AAA:2000s:1:C"]["score"] == 99.0
+    assert scored["AAA:2000s:2:C"]["score"] == 40.0
     assert scored["AAA:2000s:1:C"]["totalsScore"] == 100.0
     assert scored["AAA:2000s:1:C"]["rateScore"] == 100.0
     assert scored["AAA:2000s:2:C"]["totalsScore"] == 0.0

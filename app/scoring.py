@@ -8,6 +8,11 @@ from app.constants import (
     HYBRID_RATES_WEIGHT,
     HYBRID_TOTALS_WEIGHT,
     PROJECTED_OTL,
+    RATING_CURVE_EXPONENT,
+    RATING_CURVE_FLOOR_RAW,
+    RATING_CURVE_HIGH,
+    RATING_CURVE_LOW,
+    RATING_CURVE_MID,
     ROLE_CONFIG,
 )
 
@@ -21,6 +26,7 @@ PER_GAME_METRICS = {
 }
 
 TOTALS_METRIC_EXCLUSIONS = {
+    "D": {"avgTimeOnIcePerGame"},
     "G": {"savePercentage", "goalsAgainstAverageInverse"},
 }
 
@@ -46,6 +52,28 @@ def project_record(total_score: float) -> dict[str, Any]:
         "overtimeLosses": overtime_losses,
         "display": f"{wins}-{losses}-{overtime_losses}",
     }
+
+
+def curve_rating(raw_score: float, top_score: float) -> float:
+    raw = max(0.0, min(raw_score, top_score))
+    if top_score <= 0:
+        return round(RATING_CURVE_LOW, 1)
+    if top_score <= RATING_CURVE_FLOOR_RAW:
+        return round(
+            RATING_CURVE_LOW + (raw / top_score) * (RATING_CURVE_HIGH - RATING_CURVE_LOW),
+            1,
+        )
+    if raw <= RATING_CURVE_FLOOR_RAW:
+        return round(
+            RATING_CURVE_LOW
+            + (raw / RATING_CURVE_FLOOR_RAW) * (RATING_CURVE_MID - RATING_CURVE_LOW),
+            1,
+        )
+    normalized = (raw - RATING_CURVE_FLOOR_RAW) / (top_score - RATING_CURVE_FLOOR_RAW)
+    return round(
+        RATING_CURVE_MID + (normalized**RATING_CURVE_EXPONENT) * (RATING_CURVE_HIGH - RATING_CURVE_MID),
+        1,
+    )
 
 
 def percentile_rank(values: list[float], target: float) -> float:
@@ -138,7 +166,7 @@ def score_role_players(role: str, players: list[dict[str, Any]]) -> dict[str, di
         for metric in rate_weights
     }
 
-    scored: dict[str, dict[str, Any]] = {}
+    raw_scored: dict[str, dict[str, Any]] = {}
     for player in players:
         total_percentiles, total_score = _weighted_percentile_scores(
             total_weights,
@@ -150,16 +178,24 @@ def score_role_players(role: str, players: list[dict[str, Any]]) -> dict[str, di
             rate_values,
             player["rateMetrics"],
         )
-        score = round(
+        raw_score = round(
             HYBRID_TOTALS_WEIGHT * total_score + HYBRID_RATES_WEIGHT * rate_score,
             1,
         )
-        scored[player["candidateKey"]] = {
+        raw_scored[player["candidateKey"]] = {
             **player,
             "totalsPercentiles": total_percentiles,
             "ratePercentiles": rate_percentiles,
             "totalsScore": total_score,
             "rateScore": rate_score,
-            "score": score,
+            "rawScore": raw_score,
+        }
+
+    top_raw_score = max((player["rawScore"] for player in raw_scored.values()), default=0.0)
+    scored: dict[str, dict[str, Any]] = {}
+    for candidate_key, player in raw_scored.items():
+        scored[candidate_key] = {
+            **player,
+            "score": curve_rating(player["rawScore"], top_raw_score),
         }
     return scored

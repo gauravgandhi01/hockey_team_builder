@@ -401,6 +401,12 @@ function formatOfferStat(label, value) {
   if (label === "GAA") {
     return `${label} ${Number(value).toFixed(2)}`;
   }
+  if (label === "TOI") {
+    const totalSeconds = Math.max(0, Math.round(Number(value) || 0));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = String(totalSeconds % 60).padStart(2, "0");
+    return `${label} ${minutes}:${seconds}`;
+  }
   return `${label} ${value}`;
 }
 
@@ -410,6 +416,7 @@ function statLabelForKey(key) {
     assists: "A",
     goals: "G",
     shots: "SOG",
+    avgTimeOnIcePerGame: "TOI",
     wins: "W",
     shutouts: "SO",
     goalsAgainstAverage: "GAA",
@@ -613,6 +620,12 @@ function formatResultStat(key, value) {
   }
   if (key === "goalsAgainstAverage") {
     return `${label}: ${Number(value).toFixed(2)}`;
+  }
+  if (key === "avgTimeOnIcePerGame") {
+    const totalSeconds = Math.max(0, Math.round(Number(value) || 0));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = String(totalSeconds % 60).padStart(2, "0");
+    return `${label}: ${minutes}:${seconds}`;
   }
   return `${label}: ${value}`;
 }
