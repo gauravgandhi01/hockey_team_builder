@@ -11,7 +11,7 @@ This is no longer the original current-roster prototype. The shipped product is 
 - branded as `linecraft`
 
 As of the latest verification:
-- tests: `29 passed`
+- tests: `35 passed`
 - runtime entrypoint: `uvicorn app.main:app --reload`
 - local cache DB: `storage/historical_cache.sqlite3`
 
@@ -51,12 +51,13 @@ Examples:
 The app presents the historical team identity as the primary draw label and logo, and shows modern franchise context as a secondary note when applicable.
 
 ### Rerolls
-Each run has two independent one-time rerolls handled in the frontend:
+Normal mode uses two independent one-time rerolls handled in the frontend:
 - `Reroll Team`: keeps the decade fixed and redraws only the franchise
 - `Reroll Decade`: keeps the franchise fixed and redraws only the decade
 
-The frontend prevents additional use after one successful reroll of each type.
-The backend does not independently enforce a one-time reroll budget.
+Hard mode replaces those with a single shared one-time `Reroll Draw`, which redraws both the team and the decade at once.
+
+The frontend enforces reroll usage. The backend does not independently enforce reroll budgets.
 
 ### Candidate Eligibility
 A candidate is eligible only if:
@@ -72,20 +73,28 @@ Primary position is inferred from the position where the player logged the most 
 - `G -> G`
 
 ### Candidate Ordering And Display
-Candidates are currently sorted by:
+Normal mode candidates are currently sorted by:
 1. decade `gamesPlayed` descending
 2. slot sort order `C, W, D, G`
 3. player name
 
+Hard mode candidates are sorted alphabetically by player name on the server.
+
 This is intentionally transparent. Hidden preview scores are not shown and do not drive ordering.
 
-Candidate cards display:
+Normal mode candidate cards display:
 - historical team abbreviation
 - player position badge
 - a coarse hidden-strength tier badge (`Tier 1` through `Tier 5`)
 - role-specific decade stats
+- awards / trophy badges, including a Stanley Cup badge when the player won with that exact team stint
 
-Visible stats by role:
+Hard mode candidate cards intentionally hide pre-pick hinting:
+- `offerStats` are omitted
+- `ratingTier` is omitted
+- award badges are omitted
+
+Visible stats by role in normal mode:
 - `C`: `P`, `A`, `G`, `SOG`
 - `W`: `P`, `G`, `SOG`
 - `D`: `P`, `A`, `SOG`, optionally `TOI`
@@ -94,14 +103,14 @@ Visible stats by role:
 ### Tier System
 The app now exposes a coarse tier bucket on candidate cards without revealing exact ratings.
 
-Current tier bands:
-- `Tier 1`: `95+`
-- `Tier 2`: `90-94.9`
-- `Tier 3`: `84-89.9`
-- `Tier 4`: `76-83.9`
-- `Tier 5`: `<76`
+Current tiers are percentile-based within each `decade + role` leaderboard:
+- `Tier 1`: top `3%`
+- `Tier 2`: next `7%`
+- `Tier 3`: next `15%`
+- `Tier 4`: next `25%`
+- `Tier 5`: bottom `50%`
 
-This is derived from the hidden role rating and exists only to give users directional signal.
+This is derived from the hidden role rating and exists only to give users directional signal without exposing exact scores.
 
 ## Branding And UI
 
@@ -183,6 +192,29 @@ uvicorn app.main:app --reload
 Open:
 - `http://127.0.0.1:8000`
 
+## Hidden Admin Dashboard
+Access is intentionally unlinked and key-guarded.
+
+Environment variables:
+- `LINECRAFT_ADMIN_PATH`
+- `LINECRAFT_ADMIN_KEY`
+
+Example:
+```bash
+export LINECRAFT_ADMIN_KEY="your-secret-key"
+export LINECRAFT_ADMIN_PATH="/_private_linecraft_admin"
+uvicorn app.main:app --reload
+```
+
+Open:
+- `http://127.0.0.1:8000/_private_linecraft_admin?key=your-secret-key`
+
+Behavior:
+- access can also be provided via `X-Linecraft-Admin-Key`
+- missing or incorrect credentials return `404`
+- the dashboard is read-only and meant for model inspection
+- it currently shows role/decade distributions, top role tables, top overall tables, scoring version, and prewarm status
+
 ## How To Prewarm The Historical Cache
 ```bash
 source .venv/bin/activate
@@ -203,7 +235,7 @@ pytest -q
 ```
 
 Current baseline:
-- `29 passed`
+- `35 passed`
 
 ## HTTP API
 
@@ -216,6 +248,7 @@ Request body:
 {
   "openSlots": ["C", "W", "W", "D", "D", "G"],
   "excludeCandidateKeys": [],
+  "hardMode": false,
   "lockFranchiseAbbrev": "WSH",
   "lockDecade": "2000s",
   "excludePairKey": "WSH:1990s"
@@ -234,6 +267,7 @@ Response shape includes:
 - `decade`
 - `seasonRange`
 - `availableSlots`
+- `hardMode`
 - `candidates[]`
 
 Each candidate currently includes:
@@ -249,6 +283,13 @@ Each candidate currently includes:
 - `historicalTeamLogo`
 - `ratingTier`
 - `offerStats`
+- `awards`
+
+Hard mode response differences:
+- `offerStats` is `null`
+- `ratingTier` is `null`
+- `awards` is an empty list
+- candidate ordering is alphabetical
 
 ### `POST /api/game/grade`
 Request body:
@@ -285,6 +326,7 @@ Responsibilities:
 - mounts `/static`
 - serves `/`
 - exposes `/api/game/draw` and `/api/game/grade`
+- exposes a hidden admin dashboard route guarded by an environment key
 - optionally starts background prewarm on startup
 
 Important note:
@@ -297,6 +339,7 @@ Current request models:
 - `DrawRequest`
   - `openSlots`
   - `excludeCandidateKeys`
+  - `hardMode`
   - `lockFranchiseAbbrev`
   - `lockDecade`
   - `excludePairKey`
@@ -316,6 +359,7 @@ Tables:
 - `draw_pairs`
 - `team_decade_pools`
 - `decade_role_leaderboards`
+- `award_details_cache`
 
 Key design points:
 - raw season payloads are persisted indefinitely
@@ -331,6 +375,8 @@ The service uses these NHL endpoints:
 - `https://records.nhl.com/site/api/franchise`
 - `https://records.nhl.com/site/api/franchise-season-results`
 - `https://api-web.nhle.com/v1/club-stats/{team}/{season}/{gameType}`
+- `https://records.nhl.com/site/api/award-details`
+- `https://records.nhl.com/site/api/player-stanley-cup-wins`
 
 It does not use the old active-roster endpoints anymore.
 
@@ -411,14 +457,29 @@ Current fix:
 - scores them through `score_role_players()`
 - persists the leaderboard to SQLite under the current `SCORING_VERSION`
 
+#### Awards And Cup Graphics
+The service enriches candidates with graphics-only accolade badges.
+
+Tracked awards currently include:
+- Hart / MVP
+- Norris
+- Vezina
+- Art Ross
+- Rocket Richard
+
+Stanley Cup wins are also surfaced as a `🏆` badge, but only when the player won the Cup with the exact team stint being slotted. That match is derived by joining the player Cup-win feed against the candidate's `seasonTeams` entries by `seasonId + teamAbbrev`.
+
+Awards are never part of ratings today. They are display-only.
+
 #### Draw Generation
 `get_random_draw(...)`:
 - filters pairs by optional franchise/decade locks and optional excluded pair key
 - excludes already-selected player IDs by parsing `candidateKey`
 - checks whether each candidate still fits an open slot
 - fetches role leaderboards for the eligible roles in that draw so tier labels can be computed
-- adds `ratingTier` to each candidate
-- sorts display candidates by `gamesPlayed`
+- adds `ratingTier` and award badges to each candidate in normal mode
+- hides those hints in hard mode
+- sorts display candidates by `gamesPlayed` in normal mode or alphabetically in hard mode
 - returns the first pair with at least one valid candidate
 
 #### Grading
@@ -452,6 +513,9 @@ Response breakdown rows currently include:
 - `metricPercentiles`
 - `stats`
 - `scorecardTotals`
+- `awards`
+
+Hard mode does not change grading output. It only hides hints during selection.
 
 ### `prewarm_missing()`
 This method:
@@ -527,6 +591,17 @@ Totals branch excludes:
 Rate branch excludes:
 - for pre-2000 `D`: `avgTimeOnIcePerGame`
 
+### Cross-Position Calibration
+A post-curve calibration layer now compresses very high defenseman and goalie ratings so they compare more reasonably against centers and wingers in lineup scoring.
+
+Current post-curve factors above the `85` threshold:
+- `C`: unchanged
+- `W`: unchanged
+- `D`: compressed by `0.88`
+- `G`: compressed by `0.94`
+
+This does not affect `rawScore` or within-role ordering. It only affects the final displayed/game `score` used in lineups and tiers.
+
 ### Rating Curves
 There are now separate rating curves for skaters and goalies.
 
@@ -579,8 +654,11 @@ Important client state includes:
 - `loadingKind`
 - `error`
 - `shuffleFrame`
+- `hardMode`
+- `hardModeLocked`
 - `rerollTeamUsed`
 - `rerollDecadeUsed`
+- `rerollDrawUsed`
 - `candidateFilter`
 
 ### Key Frontend Behavior
@@ -589,6 +667,7 @@ Important client state includes:
 - position filter chips (`All`, `C`, `W`, `D`, `G`) are client-side only
 - candidate filtering resets to `ALL` after every new draw or reroll
 - result rendering is now share-card-first
+- hard mode is selected before the first draw and locks for the rest of the run
 
 ### Candidate Card UX
 Current cards show:
@@ -599,6 +678,13 @@ Current cards show:
 - player name
 - historical team name
 - visible role-specific stats
+
+Hard mode cards only show:
+- player headshot
+- team abbreviation
+- position pill
+- player name
+- historical team name
 
 ### Share Card UX
 The final share card currently includes:
@@ -637,6 +723,7 @@ The current UI has several mobile-specific optimizations:
 - hero chips:
   - `6 picks`
   - `1980s to 2020s`
+  - `Hard Mode`
   - `Start Over Run`
 - footer disclaimer and credit
 
@@ -646,12 +733,15 @@ The current UI has several mobile-specific optimizations:
 Covers:
 - root render
 - draw response shapes
+- hard-mode draw hiding and alphabetical ordering
 - persisted cache reuse across runs
 - predecessor franchise resolution
 - reroll lock behavior by filters
 - invalid grading submissions
 - cumulative scorecard totals
 - draw candidate payloads including `ratingTier`
+- hidden admin dashboard access
+- Cup-badge team-stint matching
 
 ### `tests/test_scoring.py`
 Covers:
@@ -663,6 +753,7 @@ Covers:
 - projected record mapping
 - rating curves for skaters and goalies
 - tier mapping
+- cross-position calibration
 - totals/rate metric inclusion and exclusion
 - TOI exclusion pre-2000
 - hybrid role scoring
@@ -670,11 +761,12 @@ Covers:
 ## Known Technical Debt / Caveats
 - `README.md` is partially stale. It still mentions projected record as a visible product behavior even though the UI no longer shows it.
 - API still returns `projectedRecord`, but frontend ignores it.
-- Reroll budgets are enforced in the frontend only.
-- Candidate ordering is by `gamesPlayed`, not by rating, which is intentional but may not match user intuition.
+- Normal-mode and hard-mode reroll budgets are enforced in the frontend only.
+- Candidate ordering is by `gamesPlayed` in normal mode and alphabetically in hard mode, not by rating, which is intentional but may not match user intuition.
 - Historical logo URLs assume NHL asset availability by team abbreviation. If a predecessor logo disappears upstream, the UI may degrade visually.
 - The app depends on external NHL APIs at runtime unless the relevant cache rows are already populated.
-- There is no auth, no DB migration system, no deploy-specific config, and no analytics.
+- The hidden admin route is key-guarded but intentionally lightweight; it is not a full auth system.
+- There is no DB migration system, no deploy-specific config, and no analytics.
 
 ## Safe Places To Modify Common Features
 - scoring weights / curves: `app/constants.py`, `app/scoring.py`
@@ -685,7 +777,7 @@ Covers:
 
 ## Current Version Markers
 At time of this handoff:
-- `SCHEMA_VERSION = historical-cache-v1`
-- `SCORING_VERSION = historical-hybrid-70-30-v10`
+- `SCHEMA_VERSION = historical-cache-v2`
+- `SCORING_VERSION = historical-hybrid-70-30-v14`
 
 Any scoring change that affects derived team-decade pools or leaderboards should usually bump `SCORING_VERSION` so stale SQLite-derived payloads are not reused.

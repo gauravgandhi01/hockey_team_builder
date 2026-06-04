@@ -64,6 +64,7 @@ class MockHistoricalApi:
                 {"franchiseId": 27, "seasonId": 19801981, "teamId": 32, "triCode": "QUE", "teamName": "Quebec Nordiques", "gameTypeId": 2},
                 {"franchiseId": 27, "seasonId": 19811982, "teamId": 32, "triCode": "QUE", "teamName": "Quebec Nordiques", "gameTypeId": 2},
                 {"franchiseId": 27, "seasonId": 19951996, "teamId": 21, "triCode": "COL", "teamName": "Colorado Avalanche", "gameTypeId": 2},
+                {"franchiseId": 27, "seasonId": 19961997, "teamId": 21, "triCode": "COL", "teamName": "Colorado Avalanche", "gameTypeId": 2},
                 {"franchiseId": 27, "seasonId": 20242025, "teamId": 21, "triCode": "COL", "teamName": "Colorado Avalanche", "gameTypeId": 2},
                 {"franchiseId": 40, "seasonId": 20242025, "teamId": 59, "triCode": "UTA", "teamName": "Utah Mammoth", "gameTypeId": 2},
                 {"franchiseId": 40, "seasonId": 20252026, "teamId": 59, "triCode": "UTA", "teamName": "Utah Mammoth", "gameTypeId": 2},
@@ -87,6 +88,24 @@ class MockHistoricalApi:
                 {"playerId": 103, "fullName": "Mike Green", "seasonId": 20092010, "teamId": 15, "trophyId": 11, "status": "FINALIST"},
                 {"playerId": 105, "fullName": "Jose Theodore", "seasonId": 20092010, "teamId": 15, "trophyId": 18, "status": "FINALIST"},
                 {"playerId": 217, "fullName": "Connor Hellebuyck", "seasonId": 20242025, "teamId": 52, "trophyId": 18, "status": "WINNER"},
+            ]
+        }
+        self.player_stanley_cup_wins = {
+            "data": [
+                {
+                    "playerId": 100,
+                    "playerName": "Alex Ovechkin",
+                    "cupsWon": 1,
+                    "seasonsWon": "2017-18 (WSH)",
+                    "teamAbbrevs": "WSH",
+                },
+                {
+                    "playerId": 314,
+                    "playerName": "Patrick Roy",
+                    "cupsWon": 1,
+                    "seasonsWon": "1995-96 (COL)",
+                    "teamAbbrevs": "COL",
+                },
             ]
         }
         self.club_stats = {
@@ -122,6 +141,17 @@ class MockHistoricalApi:
                     skater(313, "Sandis", "Ozolinsh", "D", 80, 13, 34, 47, 9, 180),
                 ],
                 "goalies": [goalie(314, "Patrick", "Roy", 82, 38, 170, 1905, 1735, 5, 198200)],
+            },
+            ("COL", "19961997"): {
+                "season": "19961997",
+                "gameType": 2,
+                "skaters": [
+                    skater(310, "Joe", "Sakic", "C", 65, 36, 38, 74, 16, 244),
+                    skater(311, "Valeri", "Kamensky", "L", 81, 22, 38, 60, 10, 190),
+                    skater(312, "Claude", "Lemieux", "R", 82, 36, 14, 50, 8, 222),
+                    skater(313, "Sandis", "Ozolinsh", "D", 80, 23, 45, 68, 12, 210),
+                ],
+                "goalies": [goalie(314, "Patrick", "Roy", 63, 38, 140, 1605, 1465, 6, 150500)],
             },
             ("COL", "20242025"): {
                 "season": "20242025",
@@ -251,6 +281,8 @@ class MockHistoricalApi:
             return make_response(self.season_results)
         if path.endswith("/site/api/award-details"):
             return make_response(self.award_details)
+        if path.endswith("/site/api/player-stanley-cup-wins"):
+            return make_response(self.player_stanley_cup_wins)
         if "/v1/club-stats/" in path:
             parts = path.split("/")
             team = parts[-3]
@@ -337,6 +369,37 @@ def test_draw_endpoint_returns_wsh_2000s_candidates_sorted_by_games_played(tmp_p
     assert defenseman["awards"] == [
         {"key": "norris", "label": "Norris", "level": "finalist", "count": 2},
     ]
+
+
+def test_cup_badge_only_appears_for_matching_team_stint(tmp_path: Path):
+    transport = MockHistoricalApi()
+    with create_test_client(tmp_path / "cache.sqlite3", transport) as client:
+        col_response = client.post(
+            "/api/game/draw",
+            json={
+                "openSlots": ["C", "W", "D", "G"],
+                "excludeCandidateKeys": [],
+                "lockFranchiseAbbrev": "COL",
+                "lockDecade": "1990s",
+            },
+        )
+        wsh_response = client.post(
+            "/api/game/draw",
+            json={
+                "openSlots": ["C", "W", "W", "D", "G"],
+                "excludeCandidateKeys": [],
+                "lockFranchiseAbbrev": "WSH",
+                "lockDecade": "2000s",
+            },
+        )
+
+    assert col_response.status_code == 200
+    roy = next(entry for entry in col_response.json()["candidates"] if entry["playerId"] == 314)
+    assert roy["awards"] == [{"key": "cup", "label": "🏆", "level": "winner", "count": 1}]
+
+    assert wsh_response.status_code == 200
+    ovechkin = next(entry for entry in wsh_response.json()["candidates"] if entry["playerId"] == 100)
+    assert {"key": "cup", "label": "🏆", "level": "winner", "count": 1} not in ovechkin["awards"]
 
 
 def test_draw_endpoint_hard_mode_hides_hints_and_sorts_alphabetically(tmp_path: Path):

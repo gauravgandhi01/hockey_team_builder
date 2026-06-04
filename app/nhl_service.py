@@ -24,6 +24,7 @@ from app.constants import (
     SLOT_LABELS,
     SLOT_SEQUENCE,
     SLOT_SORT_ORDER,
+    STANLEY_CUP_BADGE,
     TRACKED_AWARD_TROPHY_IDS,
     SUPPORTED_DECADES,
     SUPPORTED_GAME_TYPE,
@@ -40,6 +41,7 @@ from app.scoring import (
 PRIMARY_POSITION_ORDER = {"C": 0, "L": 1, "R": 2, "D": 3, "G": 4}
 ROLE_ORDER = ["C", "W", "D", "G"]
 AWARD_CACHE_KEY = "tracked-awards-v1"
+CUP_WINS_CACHE_KEY = "stanley-cup-wins-v1"
 ADMIN_SCORE_BUCKETS = [
     (95.0, "95+"),
     (90.0, "90-94.9"),
@@ -170,6 +172,8 @@ class NhlApiService:
         self._leaderboard_cache: dict[tuple[int, str], dict[str, dict[str, Any]]] = {}
         self._award_details: list[dict[str, Any]] | None = None
         self._award_index: dict[tuple[int, int, int], list[dict[str, Any]]] | None = None
+        self._cup_wins: list[dict[str, Any]] | None = None
+        self._cup_win_index: dict[int, set[tuple[int, str]]] | None = None
         self._closed = False
 
     async def aclose(self) -> None:
@@ -407,13 +411,67 @@ class NhlApiService:
         self._award_index = dict(index)
         return self._award_index
 
+    async def get_cup_wins(self) -> list[dict[str, Any]]:
+        if self._cup_wins is not None:
+            return self._cup_wins
+
+        cached = self.store.get_award_details(CUP_WINS_CACHE_KEY)
+        if cached is not None:
+            self._cup_wins = cached
+            return cached
+
+        payload = await self._get_records_json("player-stanley-cup-wins")
+        rows: list[dict[str, Any]] = []
+        for row in payload.get("data", []):
+            player_id = row.get("playerId")
+            seasons_won = row.get("seasonsWon")
+            if player_id is None or not seasons_won:
+                continue
+            wins: list[dict[str, Any]] = []
+            for entry in str(seasons_won).split(","):
+                part = entry.strip()
+                if not part or "(" not in part or ")" not in part:
+                    continue
+                season_label, team_part = part.split("(", 1)
+                season_label = season_label.strip()
+                team_abbrev = team_part.rstrip(")").strip()
+                try:
+                    start_year = int(season_label[:4])
+                except ValueError:
+                    continue
+                season_id = int(f"{start_year}{start_year + 1}")
+                wins.append({"seasonId": season_id, "teamAbbrev": team_abbrev})
+            if not wins:
+                continue
+            rows.append({"playerId": int(player_id), "wins": wins})
+
+        self.store.set_award_details(CUP_WINS_CACHE_KEY, rows)
+        self._cup_wins = rows
+        return rows
+
+    async def get_cup_win_index(self) -> dict[int, set[tuple[int, str]]]:
+        if self._cup_win_index is not None:
+            return self._cup_win_index
+
+        rows = await self.get_cup_wins()
+        index: dict[int, set[tuple[int, str]]] = {}
+        for row in rows:
+            index[row["playerId"]] = {
+                (int(win["seasonId"]), str(win["teamAbbrev"]))
+                for win in row["wins"]
+            }
+        self._cup_win_index = index
+        return index
+
     async def summarize_candidate_awards(
         self,
         player_id: int,
         season_teams: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
         award_index = await self.get_award_index()
+        cup_win_index = await self.get_cup_win_index()
         trophy_counts: dict[int, dict[str, int]] = defaultdict(lambda: {"winner": 0, "finalist": 0})
+        cup_wins = 0
         for season_team in season_teams:
             stint_key = (player_id, int(season_team["season"]), int(season_team["teamId"]))
             for award in award_index.get(stint_key, []):
@@ -422,8 +480,19 @@ class NhlApiService:
                     trophy_counts[award["trophyId"]]["winner"] += 1
                 elif trophy_config["allowFinalists"]:
                     trophy_counts[award["trophyId"]]["finalist"] += 1
+            if (int(season_team["season"]), season_team["teamCode"]) in cup_win_index.get(player_id, set()):
+                cup_wins += 1
 
         awards: list[dict[str, Any]] = []
+        if cup_wins > 0:
+            awards.append(
+                {
+                    "key": STANLEY_CUP_BADGE["key"],
+                    "label": STANLEY_CUP_BADGE["label"],
+                    "level": "winner",
+                    "count": cup_wins,
+                }
+            )
         for trophy_id, trophy_config in AWARD_TROPHIES.items():
             counts = trophy_counts.get(trophy_id)
             if counts is None:
