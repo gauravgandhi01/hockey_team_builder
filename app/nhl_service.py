@@ -26,7 +26,14 @@ from app.constants import (
     SUPPORTED_GAME_TYPE,
 )
 from app.historical_store import HistoricalCacheStore
-from app.scoring import map_letter_grade, project_record, rate_metrics, score_role_players, totals_metrics
+from app.scoring import (
+    map_letter_grade,
+    project_record,
+    rate_metrics,
+    rating_tier,
+    score_role_players,
+    totals_metrics,
+)
 
 PRIMARY_POSITION_ORDER = {"C": 0, "L": 1, "R": 2, "D": 3, "G": 4}
 ROLE_ORDER = ["C", "W", "D", "G"]
@@ -634,12 +641,23 @@ class NhlApiService:
             if not eligible:
                 continue
 
+            eligible_roles = sorted({candidate["eligibleSlot"] for candidate in eligible}, key=ROLE_ORDER.index)
+            role_leaderboards = {
+                role: leaderboard
+                for role, leaderboard in zip(
+                    eligible_roles,
+                    await asyncio.gather(
+                        *(self.get_decade_role_leaderboard(pair["decadeStart"], role) for role in eligible_roles)
+                    ),
+                )
+            }
             eligible_games_played = {
                 candidate["candidateKey"]: candidate["stats"]["gamesPlayed"]
                 for candidate in eligible
             }
             candidates = []
             for candidate in eligible:
+                scored = role_leaderboards[candidate["eligibleSlot"]].get(candidate["candidateKey"])
                 candidates.append(
                     {
                         "candidateKey": candidate["candidateKey"],
@@ -652,6 +670,7 @@ class NhlApiService:
                         "historicalTeamAbbrev": candidate["historicalTeamAbbrev"],
                         "historicalTeamName": candidate["historicalTeamName"],
                         "historicalTeamLogo": candidate["historicalTeamLogo"],
+                        "ratingTier": rating_tier(scored["score"]) if scored is not None else None,
                         "offerStats": decade_offer_stats(candidate),
                     }
                 )

@@ -49,7 +49,7 @@ def create_app(service: NhlApiService | None = None, start_background_prewarm: b
                     await prewarm_task
             await created_service.aclose()
 
-    app = FastAPI(title="NHL Builder", lifespan=lifespan)
+    app = FastAPI(title="linecraft", lifespan=lifespan)
     app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
     def get_service(request: Request) -> NhlApiService:

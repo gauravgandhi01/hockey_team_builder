@@ -79,6 +79,14 @@ GRADE_BANDS = [
     (0.0, "F"),
 ]
 
+RATING_TIER_BANDS = [
+    (95.0, 1),
+    (90.0, 2),
+    (84.0, 3),
+    (76.0, 4),
+    (0.0, 5),
+]
+
 MIN_DECADE_GAMES = 100
 HYBRID_TOTALS_WEIGHT = 0.70
 HYBRID_RATES_WEIGHT = 0.30
@@ -87,8 +95,13 @@ RATING_CURVE_LOW = 40.0
 RATING_CURVE_MID = 70.0
 RATING_CURVE_HIGH = 99.0
 RATING_CURVE_EXPONENT = 1.6
+GOALIE_RATING_CURVE_FLOOR_RAW = 80.0
+GOALIE_RATING_CURVE_LOW = 55.0
+GOALIE_RATING_CURVE_MID = 80.0
+GOALIE_RATING_CURVE_HIGH = 99.0
+GOALIE_RATING_CURVE_EXPONENT = 1.1
 PROJECTED_OTL = 8
 SCHEMA_VERSION = "historical-cache-v1"
-SCORING_VERSION = "historical-hybrid-70-30-v8"
+SCORING_VERSION = "historical-hybrid-70-30-v10"
 LOGO_URL_TEMPLATE = "https://assets.nhle.com/logos/nhl/svg/{abbrev}_light.svg"
 HEADSHOT_FALLBACK_TEMPLATE = "https://assets.nhle.com/mugs/nhl/{season}/{abbrev}/{player_id}.png"

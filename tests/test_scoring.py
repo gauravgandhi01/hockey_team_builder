@@ -6,6 +6,7 @@ from app.scoring import (
     project_record,
     rate_metric_weights,
     rate_metrics,
+    rating_tier,
     score_role_players,
     totals_metric_weights,
     totals_metrics,
@@ -57,10 +58,24 @@ def test_project_record_uses_simple_hockey_projection():
 
 
 def test_curve_rating_spreads_top_end_and_keeps_full_scale():
-    assert curve_rating(99.8, 99.8) == 99.0
-    assert curve_rating(85.0, 99.8) == 70.0
-    assert curve_rating(42.5, 99.8) == 55.0
-    assert curve_rating(98.0, 99.8) == 93.6
+    assert curve_rating(99.8, 99.8, "C") == 99.0
+    assert curve_rating(85.0, 99.8, "C") == 70.0
+    assert curve_rating(42.5, 99.8, "C") == 55.0
+    assert curve_rating(98.0, 99.8, "C") == 93.6
+
+
+def test_goalie_curve_softens_dropoff():
+    assert curve_rating(95.6, 95.6, "G") == 99.0
+    assert curve_rating(86.5, 95.6, "G") == 87.3
+    assert curve_rating(82.2, 95.6, "G") == 82.2
+
+
+def test_rating_tier_uses_coarse_bands():
+    assert rating_tier(96.0) == 1
+    assert rating_tier(92.0) == 2
+    assert rating_tier(84.0) == 3
+    assert rating_tier(76.0) == 4
+    assert rating_tier(75.9) == 5
 
 
 def test_rate_metrics_use_per_game_counts():

@@ -3,7 +3,9 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>NHL Builder</title>
+    <title>linecraft</title>
+    <link rel="icon" type="image/png" href="/static/logo.png">
+    <link rel="apple-touch-icon" href="/static/logo.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
@@ -15,14 +17,17 @@
       <header class="hero">
         <div class="hero-copy">
           <p class="eyebrow">Historical Franchise Mode</p>
-          <h1>NHL Builder</h1>
+          <div class="brand-lockup">
+            <img class="brand-logo" src="/static/logo.png" alt="linecraft logo">
+          </div>
           <p class="hero-text">
-            Build a six-slot lineup from random NHL franchise-and-decade draws, then get graded against players from that same era.
+            Build a lineup from random NHL franchise-and-decade draws, then get graded by how each pick stacks up against players from the same decade at that position.
           </p>
         </div>
         <div class="hero-summary">
           <div class="summary-chip">6 picks</div>
           <div class="summary-chip">1980s to 2020s</div>
+          <button id="new-run-button" class="summary-chip summary-action" type="button">Start Over Run</button>
         </div>
       </header>
 
@@ -33,7 +38,6 @@
               <p class="panel-kicker">Lineup</p>
               <h2>Your card</h2>
             </div>
-            <button id="new-run-button" class="ghost-button" type="button">Start New Run</button>
           </div>
           <div id="lineup-board" class="lineup-board"></div>
         </section>
@@ -59,6 +63,11 @@
           <div id="result-panel" class="result-panel"></div>
         </section>
       </main>
+
+      <footer class="site-footer">
+        <span>This site is not affiliated with the NHL.</span>
+        <span>Made by G</span>
+      </footer>
     </div>
   </body>
 </html>

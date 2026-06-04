@@ -5,9 +5,15 @@ from typing import Any
 
 from app.constants import (
     GRADE_BANDS,
+    GOALIE_RATING_CURVE_EXPONENT,
+    GOALIE_RATING_CURVE_FLOOR_RAW,
+    GOALIE_RATING_CURVE_HIGH,
+    GOALIE_RATING_CURVE_LOW,
+    GOALIE_RATING_CURVE_MID,
     HYBRID_RATES_WEIGHT,
     HYBRID_TOTALS_WEIGHT,
     PROJECTED_OTL,
+    RATING_TIER_BANDS,
     RATING_CURVE_EXPONENT,
     RATING_CURVE_FLOOR_RAW,
     RATING_CURVE_HIGH,
@@ -45,6 +51,13 @@ def map_letter_grade(score: float) -> str:
     return "F"
 
 
+def rating_tier(score: float) -> int:
+    for threshold, tier in RATING_TIER_BANDS:
+        if score >= threshold:
+            return tier
+    return RATING_TIER_BANDS[-1][1]
+
+
 def clamp(value: int, minimum: int, maximum: int) -> int:
     return max(minimum, min(maximum, value))
 
@@ -61,24 +74,37 @@ def project_record(total_score: float) -> dict[str, Any]:
     }
 
 
-def curve_rating(raw_score: float, top_score: float) -> float:
+def curve_rating(raw_score: float, top_score: float, role: str | None = None) -> float:
+    if role == "G":
+        floor = GOALIE_RATING_CURVE_FLOOR_RAW
+        low = GOALIE_RATING_CURVE_LOW
+        mid = GOALIE_RATING_CURVE_MID
+        high = GOALIE_RATING_CURVE_HIGH
+        exponent = GOALIE_RATING_CURVE_EXPONENT
+    else:
+        floor = RATING_CURVE_FLOOR_RAW
+        low = RATING_CURVE_LOW
+        mid = RATING_CURVE_MID
+        high = RATING_CURVE_HIGH
+        exponent = RATING_CURVE_EXPONENT
+
     raw = max(0.0, min(raw_score, top_score))
     if top_score <= 0:
-        return round(RATING_CURVE_LOW, 1)
-    if top_score <= RATING_CURVE_FLOOR_RAW:
+        return round(low, 1)
+    if top_score <= floor:
         return round(
-            RATING_CURVE_LOW + (raw / top_score) * (RATING_CURVE_HIGH - RATING_CURVE_LOW),
+            low + (raw / top_score) * (high - low),
             1,
         )
-    if raw <= RATING_CURVE_FLOOR_RAW:
+    if raw <= floor:
         return round(
-            RATING_CURVE_LOW
-            + (raw / RATING_CURVE_FLOOR_RAW) * (RATING_CURVE_MID - RATING_CURVE_LOW),
+            low
+            + (raw / floor) * (mid - low),
             1,
         )
-    normalized = (raw - RATING_CURVE_FLOOR_RAW) / (top_score - RATING_CURVE_FLOOR_RAW)
+    normalized = (raw - floor) / (top_score - floor)
     return round(
-        RATING_CURVE_MID + (normalized**RATING_CURVE_EXPONENT) * (RATING_CURVE_HIGH - RATING_CURVE_MID),
+        mid + (normalized**exponent) * (high - mid),
         1,
     )
 
@@ -210,6 +236,6 @@ def score_role_players(
     for candidate_key, player in raw_scored.items():
         scored[candidate_key] = {
             **player,
-            "score": curve_rating(player["rawScore"], top_raw_score),
+            "score": curve_rating(player["rawScore"], top_raw_score, role),
         }
     return scored

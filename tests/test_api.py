@@ -284,8 +284,10 @@ def test_draw_endpoint_returns_wsh_2000s_candidates_sorted_by_games_played(tmp_p
     assert body["seasonRange"] == {"start": "2008-09", "end": "2009-10"}
     assert [entry["playerId"] for entry in body["candidates"]] == [101, 104, 100, 103, 102, 105]
     assert all("previewScore" not in entry for entry in body["candidates"])
+    assert all("ratingTier" in entry for entry in body["candidates"])
     candidate = next(entry for entry in body["candidates"] if entry["playerId"] == 100)
     assert candidate["offerStats"] == {"points": 219, "goals": 106, "shots": 896}
+    assert candidate["ratingTier"] == 1
 
 
 def test_repeated_draw_uses_persisted_team_decade_pool_without_new_network_fetch(tmp_path: Path):

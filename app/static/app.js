@@ -161,17 +161,47 @@ function randomShuffleFrame() {
   };
 }
 
-function startShuffleAnimation() {
-  state.shuffleFrame = randomShuffleFrame();
-  render();
+function isShuffleLoadingKind(kind) {
+  return ["offer", "reroll-team", "reroll-decade"].includes(kind);
+}
 
-  const intervalId = window.setInterval(() => {
-    state.shuffleFrame = randomShuffleFrame();
-    render();
-  }, 120);
+function renderShuffleFrame() {
+  if (!teamRoll || !state.shuffleFrame || !isShuffleLoadingKind(state.loadingKind)) {
+    return;
+  }
+  teamRoll.innerHTML = shuffleCardMarkup(state.shuffleFrame);
+}
+
+function startShuffleAnimation() {
+  const startedAt = window.performance.now();
+  let timeoutId = null;
+  let stopped = false;
+
+  function scheduleNextTick() {
+    if (stopped) {
+      return;
+    }
+    const elapsed = window.performance.now() - startedAt;
+    const progress = Math.min(elapsed / 1100, 1);
+    const nextDelay = Math.round(80 + progress * 130);
+    timeoutId = window.setTimeout(() => {
+      if (stopped) {
+        return;
+      }
+      state.shuffleFrame = randomShuffleFrame();
+      renderShuffleFrame();
+      scheduleNextTick();
+    }, nextDelay);
+  }
+
+  renderShuffleFrame();
+  scheduleNextTick();
 
   return () => {
-    window.clearInterval(intervalId);
+    stopped = true;
+    if (timeoutId !== null) {
+      window.clearTimeout(timeoutId);
+    }
     state.shuffleFrame = null;
   };
 }
@@ -199,6 +229,7 @@ async function requestDraw({ lockFranchiseAbbrev = null, lockDecade = null, excl
   state.loadingKind = loadingKind;
   state.error = null;
   state.currentDraw = null;
+  state.shuffleFrame = randomShuffleFrame();
   render();
 
   const stopShuffle = startShuffleAnimation();
@@ -494,12 +525,18 @@ function renderCandidateFilters() {
 function shuffleCardMarkup(frame) {
   return `
     <div class="team-card shuffling compact-card">
-      <p class="team-label">${state.loadingKind === "reroll-team" ? "Rerolling team" : state.loadingKind === "reroll-decade" ? "Rerolling decade" : "Shuffling draw"}</p>
+      <div class="shuffle-header">
+        <p class="team-label">${state.loadingKind === "reroll-team" ? "Rerolling team" : state.loadingKind === "reroll-decade" ? "Rerolling decade" : "Drawing lineup options"}</p>
+        <span class="shuffle-chip">${frame.decade}</span>
+      </div>
       <div class="shuffle-reel">
-        <img class="shuffle-logo" src="${frame.logo}" alt="${frame.name} logo">
+        <div class="shuffle-logo-shell">
+          <img class="shuffle-logo" src="${frame.logo}" alt="${frame.name} logo">
+        </div>
         <div>
           <h3>${frame.name}</h3>
-          <p class="team-subtitle">${frame.abbrev} · ${frame.decade} · Open slots: ${openSlotSummary()}</p>
+          <p class="team-subtitle">${frame.abbrev} · Rolling through franchises and eras</p>
+          <p class="shuffle-open-slots">Open slots: ${openSlotSummary()}</p>
         </div>
       </div>
     </div>
@@ -551,7 +588,7 @@ function renderPrompt() {
   const turn = Math.min(state.currentIndex + 1, SLOT_SEQUENCE.length);
   turnIndicator.textContent = `Pick ${turn} of ${SLOT_SEQUENCE.length}`;
 
-  if (["offer", "reroll-team", "reroll-decade"].includes(state.loadingKind)) {
+  if (isShuffleLoadingKind(state.loadingKind)) {
     promptTitle.textContent = state.loadingKind === "reroll-team"
       ? "Switching the team"
       : state.loadingKind === "reroll-decade"
@@ -592,7 +629,10 @@ function renderPrompt() {
         <div class="candidate-body">
           <div class="candidate-topline">
             <span class="candidate-team">${candidate.historicalTeamAbbrev}</span>
-            <span class="candidate-position ${positionToneClass(candidate.eligibleSlot)}">${candidate.positionCode}</span>
+            <div class="candidate-badges">
+              ${candidate.ratingTier ? `<span class="candidate-tier ${tierToneClass(candidate.ratingTier)}">Tier ${candidate.ratingTier}</span>` : ""}
+              <span class="candidate-position ${positionToneClass(candidate.eligibleSlot)}">${candidate.positionCode}</span>
+            </div>
           </div>
           <h3>${candidate.fullName}</h3>
           <p class="candidate-meta">${candidate.historicalTeamName}</p>
@@ -644,6 +684,10 @@ function positionToneClass(slot) {
   return `position-${String(slot || "").toLowerCase()}`;
 }
 
+function tierToneClass(tier) {
+  return `tier-${String(tier || "").toLowerCase()}`;
+}
+
 function cumulativeLineupTotals(breakdown) {
   return (breakdown || []).reduce(
     (totals, entry) => {
@@ -685,12 +729,15 @@ function shareCardMarkup() {
       <div class="share-card-header">
         <div>
           <p class="panel-kicker">Share Card</p>
-          <h4>Historical NHL Builder Result</h4>
+          <div class="share-brand-row">
+            <img class="share-brand-logo" src="/static/logo.png" alt="linecraft logo">
+          </div>
           <p class="share-card-subtitle">${decades}</p>
         </div>
         <div class="share-grade-block">
-          <span class="share-grade">${state.result.letterGrade}</span>
-          <span class="share-record">Score ${state.result.totalScore}</span>
+          <span class="share-grade-pill">${state.result.letterGrade}</span>
+          <span class="share-score-value">${state.result.totalScore}</span>
+          <span class="share-score-label">Lineup score</span>
         </div>
       </div>
       ${scorecardTotalsMarkup()}
@@ -711,6 +758,9 @@ function shareCardMarkup() {
           </article>
         `).join("")}
       </div>
+      <div class="share-card-footer">
+        <span class="share-card-url">linecraft.lol</span>
+      </div>
     </section>
   `;
 }
@@ -721,19 +771,7 @@ function renderResults() {
     return;
   }
 
-  resultPanel.innerHTML = `
-    <div class="result-header">
-      <div>
-        <p class="panel-kicker">Scorecard</p>
-        <h3>${state.result.letterGrade}</h3>
-      </div>
-      <div class="result-summary-stack">
-        <p class="result-score">${state.result.totalScore}</p>
-        <p class="result-record">Lineup score</p>
-      </div>
-    </div>
-    ${shareCardMarkup()}
-  `;
+  resultPanel.innerHTML = shareCardMarkup();
 }
 
 function render() {
