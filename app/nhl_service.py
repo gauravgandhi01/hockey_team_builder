@@ -13,6 +13,7 @@ from app.constants import (
     AWARD_TROPHIES,
     BASE_RECORDS_URL,
     BASE_WEB_URL,
+    DECADE_START_BY_LABEL,
     DECADE_LABELS,
     DEFAULT_DB_PATH,
     HEADSHOT_FALLBACK_TEMPLATE,
@@ -39,6 +40,14 @@ from app.scoring import (
 PRIMARY_POSITION_ORDER = {"C": 0, "L": 1, "R": 2, "D": 3, "G": 4}
 ROLE_ORDER = ["C", "W", "D", "G"]
 AWARD_CACHE_KEY = "tracked-awards-v1"
+ADMIN_SCORE_BUCKETS = [
+    (95.0, "95+"),
+    (90.0, "90-94.9"),
+    (85.0, "85-89.9"),
+    (80.0, "80-84.9"),
+    (70.0, "70-79.9"),
+    (0.0, "<70"),
+]
 
 
 def logo_url(abbrev: str) -> str:
@@ -911,3 +920,97 @@ class NhlApiService:
             for role in ROLE_ORDER:
                 await self.get_decade_role_leaderboard(decade_start, role)
         self.store.set_meta("prewarm_complete", SCORING_VERSION)
+
+    async def get_admin_snapshot(
+        self,
+        decade_label: str,
+        role: str,
+        role_limit: int = 25,
+        overall_limit: int = 20,
+    ) -> dict[str, Any]:
+        if decade_label not in DECADE_START_BY_LABEL:
+            raise HTTPException(status_code=400, detail=f"Unsupported decade {decade_label}.")
+        if role not in ROLE_ORDER:
+            raise HTTPException(status_code=400, detail=f"Unsupported role {role}.")
+
+        decade_start = DECADE_START_BY_LABEL[decade_label]
+        role_leaderboard = await self.get_decade_role_leaderboard(decade_start, role)
+        role_rows = sorted(
+            role_leaderboard.values(),
+            key=lambda player: (-player["score"], -player["rawScore"], player["fullName"]),
+        )
+
+        distribution = []
+        for threshold, label in ADMIN_SCORE_BUCKETS:
+            if label == "<70":
+                count = sum(1 for player in role_rows if player["score"] < 70.0)
+            else:
+                next_threshold = next(
+                    (
+                        ADMIN_SCORE_BUCKETS[index - 1][0]
+                        for index, bucket in enumerate(ADMIN_SCORE_BUCKETS)
+                        if bucket[1] == label and index > 0
+                    ),
+                    None,
+                )
+                count = sum(
+                    1
+                    for player in role_rows
+                    if player["score"] >= threshold
+                    and (next_threshold is None or player["score"] < next_threshold)
+                )
+            distribution.append({"label": label, "count": count})
+
+        role_table = [
+            {
+                "rank": index + 1,
+                "playerId": player["playerId"],
+                "fullName": player["fullName"],
+                "teamAbbrev": player["historicalTeamAbbrev"],
+                "teamName": player["historicalTeamName"],
+                "positionCode": player["positionCode"],
+                "gamesPlayed": player["stats"].get("gamesPlayed", 0),
+                "score": player["score"],
+                "rawScore": player["rawScore"],
+                "overallPercentile": player["overallPercentile"],
+                "ratingTier": player["ratingTier"],
+                "statsSummary": decade_offer_stats(player),
+            }
+            for index, player in enumerate(role_rows[:role_limit])
+        ]
+
+        overall_rows: list[dict[str, Any]] = []
+        for overview_role in ROLE_ORDER:
+            leaderboard = await self.get_decade_role_leaderboard(decade_start, overview_role)
+            overall_rows.extend(leaderboard.values())
+        overall_rows.sort(
+            key=lambda player: (-player["score"], -player["rawScore"], player["fullName"])
+        )
+        overall_table = [
+            {
+                "rank": index + 1,
+                "fullName": player["fullName"],
+                "role": player["eligibleSlot"],
+                "teamAbbrev": player["historicalTeamAbbrev"],
+                "positionCode": player["positionCode"],
+                "score": player["score"],
+                "rawScore": player["rawScore"],
+                "ratingTier": player["ratingTier"],
+            }
+            for index, player in enumerate(overall_rows[:overall_limit])
+        ]
+
+        pairs = await self.get_draw_pairs()
+        decade_pair_count = sum(1 for pair in pairs if pair["decadeStart"] == decade_start)
+
+        return {
+            "selectedDecade": decade_label,
+            "selectedRole": role,
+            "scoringVersion": SCORING_VERSION,
+            "prewarmComplete": self.store.get_meta("prewarm_complete") == SCORING_VERSION,
+            "decadePairCount": decade_pair_count,
+            "rolePlayerCount": len(role_rows),
+            "distribution": distribution,
+            "roleTable": role_table,
+            "overallTable": overall_table,
+        }

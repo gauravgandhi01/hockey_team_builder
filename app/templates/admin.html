@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>linecraft admin</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #08111a;
+        --panel: #10202d;
+        --panel-2: #152a38;
+        --line: rgba(157, 177, 193, 0.14);
+        --ink: #eef5fa;
+        --ink-soft: #9db1c1;
+        --teal: #52c6c8;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Space Grotesk", sans-serif;
+        background: linear-gradient(145deg, #061018, #0d1923 42%, #071019 100%);
+        color: var(--ink);
+      }
+      .shell {
+        width: min(1120px, calc(100% - 24px));
+        margin: 0 auto;
+        padding: 20px 0 28px;
+      }
+      h1, h2 {
+        margin: 0;
+        font-family: "Barlow Condensed", sans-serif;
+        letter-spacing: 0.02em;
+      }
+      h1 { font-size: 2.2rem; }
+      h2 { font-size: 1.45rem; }
+      p { margin: 0; color: var(--ink-soft); }
+      .eyebrow {
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        color: var(--teal);
+        font-size: 0.68rem;
+      }
+      .hero {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: end;
+        margin-bottom: 16px;
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 10px;
+        margin: 14px 0 18px;
+      }
+      .card, .panel {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: linear-gradient(180deg, rgba(21, 42, 56, 0.96), rgba(10, 22, 31, 0.96));
+      }
+      .card {
+        padding: 12px;
+      }
+      .card strong {
+        display: block;
+        margin-top: 5px;
+        font-size: 1.15rem;
+        color: var(--ink);
+      }
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: end;
+        margin-bottom: 16px;
+      }
+      label {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        font-size: 0.78rem;
+        color: var(--ink-soft);
+      }
+      select, button {
+        font: inherit;
+      }
+      select, button {
+        height: 38px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: rgba(14, 30, 40, 0.98);
+        color: var(--ink);
+        padding: 0 12px;
+      }
+      button {
+        cursor: pointer;
+        background: linear-gradient(140deg, rgba(31, 140, 150, 0.96), rgba(18, 35, 48, 0.96));
+        border: none;
+        font-weight: 600;
+      }
+      .grid {
+        display: grid;
+        gap: 14px;
+      }
+      .panel {
+        padding: 14px;
+      }
+      .panel-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: end;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      .bucket-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+        gap: 8px;
+      }
+      .bucket {
+        padding: 10px;
+        border-radius: 12px;
+        background: rgba(8, 17, 26, 0.66);
+        border: 1px solid rgba(157, 177, 193, 0.08);
+      }
+      .bucket strong {
+        display: block;
+        margin-top: 4px;
+        color: var(--ink);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.78rem;
+      }
+      th, td {
+        text-align: left;
+        padding: 8px 8px;
+        border-bottom: 1px solid rgba(157, 177, 193, 0.08);
+        vertical-align: top;
+      }
+      th {
+        color: var(--teal);
+        font-size: 0.68rem;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+      td {
+        color: var(--ink-soft);
+      }
+      td strong {
+        color: var(--ink);
+      }
+      .stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 3px 7px;
+        border-radius: 999px;
+        background: rgba(82, 198, 200, 0.08);
+        border: 1px solid rgba(157, 177, 193, 0.08);
+        color: var(--ink);
+        font-size: 0.68rem;
+        white-space: nowrap;
+      }
+      .two-up {
+        display: grid;
+        grid-template-columns: 1.25fr 1fr;
+        gap: 14px;
+      }
+      @media (max-width: 900px) {
+        .hero,
+        .two-up {
+          grid-template-columns: 1fr;
+          display: grid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">linecraft admin</p>
+          <h1>Ratings dashboard</h1>
+          <p>Read-only view into the live decade leaderboards and score distributions.</p>
+        </div>
+        <form method="get" action="{{ admin_path }}" class="controls">
+          <input type="hidden" name="key" value="{{ admin_key }}">
+          <label>
+            Decade
+            <select name="decade">
+              {% for decade in decades %}
+                <option value="{{ decade }}" {% if snapshot.selectedDecade == decade %}selected{% endif %}>{{ decade }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>
+            Role
+            <select name="role">
+              {% for role in roles %}
+                <option value="{{ role }}" {% if snapshot.selectedRole == role %}selected{% endif %}>{{ role }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <button type="submit">Refresh</button>
+        </form>
+      </header>
+
+      <section class="cards">
+        <article class="card">
+          <p class="eyebrow">Scoring version</p>
+          <strong>{{ snapshot.scoringVersion }}</strong>
+        </article>
+        <article class="card">
+          <p class="eyebrow">Prewarm status</p>
+          <strong>{{ "Complete" if snapshot.prewarmComplete else "Partial" }}</strong>
+        </article>
+        <article class="card">
+          <p class="eyebrow">{{ snapshot.selectedDecade }} pairs</p>
+          <strong>{{ snapshot.decadePairCount }}</strong>
+        </article>
+        <article class="card">
+          <p class="eyebrow">{{ snapshot.selectedRole }} player pool</p>
+          <strong>{{ snapshot.rolePlayerCount }}</strong>
+        </article>
+      </section>
+
+      <section class="two-up">
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Distribution</p>
+              <h2>{{ snapshot.selectedDecade }} {{ snapshot.selectedRole }} ratings</h2>
+            </div>
+          </div>
+          <div class="bucket-list">
+            {% for bucket in snapshot.distribution %}
+              <article class="bucket">
+                <p class="eyebrow">{{ bucket.label }}</p>
+                <strong>{{ bucket.count }}</strong>
+              </article>
+            {% endfor %}
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Overall</p>
+              <h2>{{ snapshot.selectedDecade }} top ratings</h2>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Player</th>
+                <th>Role</th>
+                <th>Team</th>
+                <th>Raw</th>
+                <th>Final</th>
+                <th>Tier</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in snapshot.overallTable %}
+                <tr>
+                  <td>{{ row.rank }}</td>
+                  <td><strong>{{ row.fullName }}</strong></td>
+                  <td>{{ row.role }}</td>
+                  <td>{{ row.teamAbbrev }}</td>
+                  <td>{{ row.rawScore }}</td>
+                  <td>{{ row.score }}</td>
+                  <td>{{ row.ratingTier }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </section>
+      </section>
+
+      <section class="panel" style="margin-top: 14px;">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Leaderboard</p>
+            <h2>{{ snapshot.selectedDecade }} {{ snapshot.selectedRole }} top {{ snapshot.roleTable|length }}</h2>
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Player</th>
+              <th>Team</th>
+              <th>Pos</th>
+              <th>GP</th>
+              <th>Stats</th>
+              <th>Raw</th>
+              <th>Final</th>
+              <th>%ile</th>
+              <th>Tier</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in snapshot.roleTable %}
+              <tr>
+                <td>{{ row.rank }}</td>
+                <td><strong>{{ row.fullName }}</strong></td>
+                <td>{{ row.teamAbbrev }}</td>
+                <td>{{ row.positionCode }}</td>
+                <td>{{ row.gamesPlayed }}</td>
+                <td>
+                  <div class="stats">
+                    {% for key, value in row.statsSummary.items() %}
+                      <span class="chip">{{ key }} {{ value }}</span>
+                    {% endfor %}
+                  </div>
+                </td>
+                <td>{{ row.rawScore }}</td>
+                <td>{{ row.score }}</td>
+                <td>{{ row.overallPercentile }}</td>
+                <td>{{ row.ratingTier }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </body>
+</html>

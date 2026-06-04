@@ -22,6 +22,26 @@ uvicorn app.main:app --reload
 
 Then open `http://127.0.0.1:8000`.
 
+## Hidden Admin Dashboard
+
+Set these env vars before starting the app:
+
+```bash
+export LINECRAFT_ADMIN_KEY="your-secret-key"
+export LINECRAFT_ADMIN_PATH="/_private_linecraft_admin"
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8000/_private_linecraft_admin?key=your-secret-key
+```
+
+The admin page is read-only and shows:
+- decade/role rating distributions
+- top players by decade and position
+- top overall ratings for the selected decade
+
 ## Prewarm Historical Cache
 
 ```bash

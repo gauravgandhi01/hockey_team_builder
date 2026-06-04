@@ -278,6 +278,32 @@ def test_root_page_renders(tmp_path: Path):
     assert "Historical Franchise Mode" in response.text
 
 
+def test_admin_dashboard_requires_key(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("LINECRAFT_ADMIN_KEY", "secret-admin-key")
+    monkeypatch.setenv("LINECRAFT_ADMIN_PATH", "/_private_linecraft_admin")
+    transport = MockHistoricalApi()
+    with create_test_client(tmp_path / "cache.sqlite3", transport) as client:
+        response = client.get("/_private_linecraft_admin")
+
+    assert response.status_code == 404
+
+
+def test_admin_dashboard_renders_with_valid_key(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("LINECRAFT_ADMIN_KEY", "secret-admin-key")
+    monkeypatch.setenv("LINECRAFT_ADMIN_PATH", "/_private_linecraft_admin")
+    transport = MockHistoricalApi()
+    with create_test_client(tmp_path / "cache.sqlite3", transport) as client:
+        response = client.get(
+            "/_private_linecraft_admin",
+            params={"key": "secret-admin-key", "decade": "2000s", "role": "W"},
+        )
+
+    assert response.status_code == 200
+    assert "Ratings dashboard" in response.text
+    assert "2000s W top" in response.text
+    assert "Alex Ovechkin" in response.text
+
+
 def test_draw_endpoint_returns_wsh_2000s_candidates_sorted_by_games_played(tmp_path: Path):
     transport = MockHistoricalApi()
     with create_test_client(tmp_path / "cache.sqlite3", transport) as client:
