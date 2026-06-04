@@ -518,15 +518,9 @@ function currentDrawMarkup(draw) {
 
 function renderPrompt() {
   if (state.result) {
-    promptTitle.textContent = "Final grade";
+    promptTitle.textContent = "Run complete";
     turnIndicator.textContent = "Run complete";
-    teamRoll.innerHTML = `
-      <div class="team-card result-callout compact-card">
-        <p class="team-label">Lineup submitted</p>
-        <h3>${state.result.letterGrade}</h3>
-        <p class="team-subtitle">Lineup score ${state.result.totalScore}</p>
-      </div>
-    `;
+    teamRoll.innerHTML = "";
     renderCandidateFilters();
     candidateGrid.innerHTML = "";
     return;
@@ -686,6 +680,7 @@ function shareCardMarkup() {
           <span class="share-record">Score ${state.result.totalScore}</span>
         </div>
       </div>
+      ${scorecardTotalsMarkup()}
       <div class="share-card-grid">
         ${breakdown.map((entry) => `
           <article class="share-slot-row ${positionToneClass(entry.slot)}">
@@ -724,7 +719,6 @@ function renderResults() {
         <p class="result-record">Lineup score</p>
       </div>
     </div>
-    ${scorecardTotalsMarkup()}
     ${shareCardMarkup()}
   `;
 }
