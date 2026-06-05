@@ -4,3 +4,5 @@ __pycache__/
 *.pyc
 storage/
 *.md
+nhl-api-docs/
+.vscode/

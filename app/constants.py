@@ -35,6 +35,11 @@ AWARD_TROPHIES = {
 }
 TRACKED_AWARD_TROPHY_IDS = tuple(AWARD_TROPHIES.keys())
 STANLEY_CUP_BADGE = {"key": "cup", "label": "🏆"}
+LOCAL_LOGO_OVERRIDES = {
+    "ATL": "/static/thrashers.gif",
+    "MNS": "/static/north_stars.png",
+    "QUE": "/static/nordiques.png",
+}
 
 ROLE_CONFIG = {
     "C": {

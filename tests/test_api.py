@@ -520,9 +520,11 @@ def test_historical_branding_resolves_predecessor_franchises(tmp_path: Path):
 
     assert wpg_response.status_code == 200
     assert wpg_response.json()["historicalTeam"]["abbrev"] == "ATL"
+    assert wpg_response.json()["historicalTeam"]["logo"] == "/static/thrashers.gif"
     assert wpg_response.json()["historicalTeam"]["secondaryNote"] == "Modern franchise: Winnipeg Jets"
     assert col_response.status_code == 200
     assert col_response.json()["historicalTeam"]["abbrev"] == "QUE"
+    assert col_response.json()["historicalTeam"]["logo"] == "/static/nordiques.png"
 
 
 def test_uta_only_exposes_2020s(tmp_path: Path):

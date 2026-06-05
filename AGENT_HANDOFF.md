@@ -11,9 +11,11 @@ This is no longer the original current-roster prototype. The shipped product is 
 - branded as `linecraft`
 
 As of the latest verification:
-- tests: `36 passed`
+- tests: `43 passed, 1 warning`
 - runtime entrypoint: `uvicorn app.main:app --reload`
 - local cache DB: `storage/historical_cache.sqlite3`
+- current schema version: `historical-cache-v2`
+- current scoring version: `historical-hybrid-70-30-v20`
 
 ## Current Product Behavior
 
@@ -32,6 +34,44 @@ Flow:
 - user can select any player from that franchise-decade pool whose natural slot still fits an open lineup slot
 - after each pick, the next draw happens automatically
 - after the final pick, the lineup is graded
+- after grading, the user can optionally reveal the best possible lineup from the exact six accepted boards they were shown
+
+### Run Modes
+There are two pre-run toggles in a centered mode row inside the main gameplay panel:
+- `Hard Mode`
+- `2020s Mode`
+
+Both toggles:
+- can be changed only before the first successful draw
+- lock for the duration of the run after the first draw
+- reset only through `Start Over`
+
+#### Hard Mode
+Hard mode is a blind-draft variant.
+
+Selection-phase changes:
+- pre-pick stats are hidden
+- tier labels are hidden
+- award badges are hidden
+- candidate ordering changes to alphabetical by player name
+- rerolls collapse to a single shared one-time `Reroll Draw`
+
+Post-run behavior does not change:
+- full stats
+- awards
+- grade
+- best possible lineup
+- share card
+all still reveal normally after grading.
+
+#### `2020s Mode`
+`2020s Mode` restricts the run to the current decade only.
+
+Behavior:
+- all draws are forced to `2020s`
+- the decade toggle state is reflected in draw copy and share-card notes
+- `Reroll Decade` is hidden because the decade is fixed
+- this mode can be combined with hard mode
 
 ### Draw Model
 Supported decades:
@@ -48,7 +88,7 @@ Examples:
 - `CAR` can resolve to `HFD`
 - `DAL` can resolve to `MNS`
 
-The app presents the historical team identity as the primary draw label and logo, and shows modern franchise context as a secondary note when applicable.
+The app presents the historical team identity as the primary draw label and logo, and shows modern franchise context as secondary context when applicable.
 
 ### Rerolls
 Normal mode uses two independent one-time rerolls handled in the frontend:
@@ -57,7 +97,7 @@ Normal mode uses two independent one-time rerolls handled in the frontend:
 
 Hard mode replaces those with a single shared one-time `Reroll Draw`, which redraws both the team and the decade at once.
 
-The frontend enforces reroll usage. The backend does not independently enforce reroll budgets.
+Reroll budgets are enforced in the frontend. The backend does not independently enforce reroll counts.
 
 ### Candidate Eligibility
 A candidate is eligible only if:
@@ -82,26 +122,34 @@ Hard mode candidates are sorted alphabetically by player name on the server.
 
 This is intentionally transparent. Hidden preview scores are not shown and do not drive ordering.
 
-Normal mode candidate cards display:
-- historical team abbreviation
-- player position badge
-- a coarse hidden-strength tier badge (`Tier 1` through `Tier 5`)
-- role-specific decade stats
-- awards / trophy badges, including a Stanley Cup badge when the player won with that exact team stint
+Normal mode candidate cards now display:
+- player headshot
+- compact combined `position · tier` badge, for example `C · T2`
+- player name
+- compact role-specific decade stats
+- award / trophy badges, including a Stanley Cup badge when the player won with that exact team stint
+
+Redundant team name and team abbreviation were intentionally removed from pick cards because every candidate on a board already shares the same draw context.
 
 Hard mode candidate cards intentionally hide pre-pick hinting:
 - `offerStats` are omitted
 - `ratingTier` is omitted
 - award badges are omitted
 
-Visible stats by role in normal mode:
-- `C`: `P`, `A`, `G`, `SOG`
-- `W`: `P`, `G`, `SOG`
-- `D`: `P`, `A`, `SOG`, optionally `TOI`
-- `G`: `W`, `SO`, `GAA`, `SV%`
+Visible pick-card stats by role in normal mode:
+- `C`: `P`, `G`, `A`
+- `W`: `P`, `G`, `A`
+- `D`: `P`, `TOI`
+- `G`: `W`, `SV%`
+
+Cards also use subtle position-tinted backgrounds:
+- `C`: blue
+- `W`: gold
+- `D`: green
+- `G`: purple
 
 ### Tier System
-The app now exposes a coarse tier bucket on candidate cards without revealing exact ratings.
+The app exposes a coarse tier bucket on candidate cards without revealing exact ratings.
 
 Current tiers are percentile-based within each `decade + role` leaderboard:
 - `Tier 1`: top `3%`
@@ -117,8 +165,8 @@ This is derived from the hidden role rating and exists only to give users direct
 ### Brand
 The site is branded as `linecraft`.
 Current brand assets and text:
-- logo file used by the app: `app/static/logo.png`
-- transparent logo source was replaced from `xazvi-Photoroom.png`
+- page/header/share-card logo: `app/static/logo.png`
+- browser/app icon: `app/static/icon.jpg`
 - site footer includes:
   - `This site is not affiliated with the NHL.`
   - `Made by G`
@@ -126,42 +174,60 @@ Current brand assets and text:
 
 ### Layout And Theme
 The UI is currently:
-- dark themed
+- dark by default
+- also supports a light theme
 - intentionally compacted for laptop and mobile
 - mobile-optimized with internal scrolling for long candidate lists
 - built entirely in `app/static/app.js` + `app/static/styles.css`
 
 Important current UI details:
-- `Start Over Run` is now a top-right hero chip, visually distinct from the informational chips
-- the hero subtitle now explains grading more clearly
+- the opening CTA is a large centered `Start Game` button
+- `Start Over` is a distinct top-right hero chip
+- the centered mode row contains `Hard Mode` and `2020s Mode`
 - the share card is the main end-state result artifact
 - the results area no longer shows a duplicate score header above the share card
-- the share-card score block is now the primary score presentation
+- the share-card score block is the primary score presentation
 - no export button exists anymore
+- cache/provenance references were removed from the visible game UI
+
+### Theme Toggle
+There is a small top-right theme toggle.
+
+Behavior:
+- switches between dark and light mode
+- persists to `localStorage`
+- default theme remains dark
 
 ### Shuffle Animation
-The team/decade shuffle animation was refactored to stop flickering the lineup strip.
+The original shuffle behavior was replaced because it still felt like flashing.
+
 Current behavior:
-- during shuffle, only the draw card is updated frame-by-frame
-- the lineup strip is not fully re-rendered each frame
-- shuffle uses team logos and decade pills
-- the animation cadence eases instead of ticking at a flat interval
+- the lineup strip is not re-rendered during shuffle
+- the loading state is a stable ticker-based shuffle card, not repeated full-card swaps
+- the card shows a moving `Teams` ticker and a moving `Era` ticker
+- when team or decade is locked, that row becomes a centered static chip instead of animating
+- `2020s Mode` keeps the decade locked to `2020s` during shuffle
+- the reveal is intentionally delayed a bit longer than before so it feels deliberate
+
+This is implemented entirely client-side in `app/static/app.js` and `app/static/styles.css`.
 
 ## Repository Layout
 Key files:
 - `app/main.py`: FastAPI app setup, lifespan, routes, service injection
-- `app/constants.py`: slots, decades, scoring weights, curve constants, scoring version, logos
-- `app/models.py`: request models
-- `app/nhl_service.py`: core historical data pipeline, draw generation, grading
-- `app/scoring.py`: weighted metric scoring, percentile logic, rating curves, grade/tier mapping
+- `app/constants.py`: slots, decades, scoring weights, curve constants, scoring version, tracked awards
+- `app/models.py`: request and response models
+- `app/nhl_service.py`: core historical data pipeline, draw generation, grading, awards enrichment, best-lineup solver, admin data helpers
+- `app/scoring.py`: weighted metric scoring, percentile logic, rating curves, grade/tier mapping, Selke bonus
 - `app/historical_store.py`: SQLite persistence layer
 - `app/prewarm_historical.py`: manual cache prewarm entrypoint
-- `app/templates/index.html`: only HTML template
+- `app/templates/index.html`: main HTML template
+- `app/templates/admin.html`: hidden admin dashboard template
 - `app/static/app.js`: full frontend state machine and rendering
 - `app/static/styles.css`: full styling
 - `tests/test_api.py`: mocked integration tests
 - `tests/test_scoring.py`: scoring and helper unit tests
 - `storage/historical_cache.sqlite3`: local persisted cache, generated at runtime
+- `reports/`: model tuning comparison reports
 - `nhl-api-docs/`: local reference docs, not used at runtime
 
 ## Runtime Stack
@@ -227,6 +293,7 @@ This fully materializes:
 - raw season stats
 - team-decade pools
 - decade-role leaderboards
+- cached award detail feed
 
 ## How To Test
 ```bash
@@ -235,7 +302,7 @@ pytest -q
 ```
 
 Current baseline:
-- `36 passed`
+- `43 passed, 1 warning`
 
 ## HTTP API
 
@@ -257,7 +324,7 @@ Request body:
 
 Notes:
 - `lockFranchiseAbbrev` is used for decade rerolls
-- `lockDecade` is used for team rerolls
+- `lockDecade` is used for team rerolls and also for `2020s Mode`
 - `excludePairKey` avoids redrawing the exact same franchise-decade pair
 
 Response shape includes:
@@ -268,6 +335,7 @@ Response shape includes:
 - `seasonRange`
 - `availableSlots`
 - `hardMode`
+- `provenance`
 - `candidates[]`
 
 Each candidate currently includes:
@@ -290,6 +358,10 @@ Hard mode response differences:
 - `ratingTier` is `null`
 - `awards` is an empty list
 - candidate ordering is alphabetical
+
+Important note:
+- `provenance` is still returned by the backend
+- the visible UI no longer surfaces cache/provenance details to the user
 
 ### `POST /api/game/grade`
 Request body:
@@ -315,7 +387,6 @@ Response currently includes:
 Important nuance:
 - `projectedRecord` is still returned by the API
 - the UI no longer displays projected record
-
 
 ### `POST /api/game/best-lineup`
 Request body:
@@ -363,7 +434,7 @@ Responsibilities:
 - mounts `/static`
 - serves `/`
 - exposes `/api/game/draw`, `/api/game/grade`, and `/api/game/best-lineup`
-- exposes a hidden admin dashboard route guarded by an environment key
+- exposes a hidden admin dashboard route guarded by environment key/path
 - optionally starts background prewarm on startup
 
 Important note:
@@ -382,6 +453,9 @@ Current request models:
   - `excludePairKey`
 - `GradeRequest`
   - `lineup: list[LineupItem]`
+- `BestLineupRequest`
+  - `lineup`
+  - `boards`
 - `LineupItem`
   - `slot`
   - `candidateKey`
@@ -458,34 +532,37 @@ Each pair contains:
 - generates `candidateKey = {pairKey}:{playerId}:{slot}`
 - persists the derived pool to SQLite under the active `SCORING_VERSION`
 
-Skater aggregate fields currently retained:
+Skater aggregate fields currently retained include:
 - `gamesPlayed`
 - `goals`
 - `assists`
 - `points`
 - `shots`
 - `avgTimeOnIcePerGame`
+- `faceoffWinPctg`
 
-Goalie aggregate fields currently retained:
+Goalie aggregate fields currently retained include:
 - `gamesPlayed`
 - `wins`
 - `shutouts`
 - `savePercentage`
 - `goalsAgainstAverage`
 
-#### TOI Tracking Compensation
-This was a real bug area and matters.
+#### TOI And Faceoff Tracking Compensation
+This was a real bug area and still matters.
 
-Problem that existed:
+Problems that existed:
 - older skater seasons did not include `avgTimeOnIcePerGame`
-- those missing seasons were effectively dragging decade TOI values toward zero
-- this produced nonsense for older defensemen, for example Brian Leetch
+- older skater seasons also did not consistently include `faceoffWinPctg`
+- missing seasons were effectively diluting historical aggregates toward zero
 
-Current fix:
+Current fixes:
 - `SKATER_TOI_TRACKING_START_SEASON = 19971998`
-- skater TOI is only weighted using seasons at or after that season when TOI exists
-- pre-1997-98 missing seasons are not treated as zero
-- pre-2000 defense scoring excludes TOI entirely to avoid partial-era bias
+- `SKATER_FACEOFF_TRACKING_START_SEASON = 19971998`
+- TOI and FO% are only weighted from tracked seasons where they actually exist
+- pre-tracking seasons are not treated as zero
+- `D` scoring excludes TOI entirely before `2000s`
+- `C` scoring excludes TOI and FO% entirely before `2000s`
 
 #### Decade Role Leaderboards
 `get_decade_role_leaderboard(decade_start, role)`:
@@ -495,10 +572,11 @@ Current fix:
 - persists the leaderboard to SQLite under the current `SCORING_VERSION`
 
 #### Awards And Cup Graphics
-The service enriches candidates with graphics-only accolade badges.
+The service enriches candidates with accolade badges.
 
-Tracked awards currently include:
+Tracked trophy families currently include:
 - Hart / MVP
+- Selke
 - Norris
 - Vezina
 - Art Ross
@@ -506,7 +584,14 @@ Tracked awards currently include:
 
 Stanley Cup wins are also surfaced as a `🏆` badge, but only when the player won the Cup with the exact team stint being slotted. That match is derived by joining the player Cup-win feed against the candidate's `seasonTeams` entries by `seasonId + teamAbbrev`.
 
-Awards are never part of ratings today. They are display-only.
+Awards behavior today:
+- all tracked trophies can appear in graphics
+- finalist badges are shown where the trophy family allows finalists
+- Stanley Cup is graphics-only
+- most trophies are graphics-only
+- Selke is the one exception: Selke wins now also contribute a small compounded winner-only score bonus
+
+The awards feed cache key was intentionally versioned separately (`tracked-awards-v2`) to refresh stale award payloads when tracked trophy families changed.
 
 #### Draw Generation
 `get_random_draw(...)`:
@@ -584,10 +669,12 @@ Each player gets:
 Current `ROLE_CONFIG`:
 
 `C`
-- `points 0.40`
-- `assists 0.20`
-- `goals 0.15`
-- `shots 0.15`
+- `points 0.36`
+- `assists 0.22`
+- `goals 0.12`
+- `shots 0.12`
+- `faceoffWinPctg 0.08`
+- `avgTimeOnIcePerGame 0.10`
 
 `W`
 - `points 0.40`
@@ -611,9 +698,10 @@ Important current cleanup decisions:
 - `gamesPlayed` is not an explicit scoring metric anymore
 - goalie efficiency metrics are rate-only, not duplicated in totals
 - defense TOI is rate-only and excluded entirely pre-2000
+- center TOI and FO% are rate-only and excluded entirely pre-2000
 
 ### Totals vs Rate Metrics
-Per-game metrics are:
+Per-game metrics include:
 - `points`
 - `assists`
 - `goals`
@@ -622,14 +710,16 @@ Per-game metrics are:
 - `shutouts`
 
 Totals branch excludes:
+- for `C`: `faceoffWinPctg`, `avgTimeOnIcePerGame`
 - for `D`: `avgTimeOnIcePerGame`
 - for `G`: `savePercentage`, `goalsAgainstAverageInverse`
 
 Rate branch excludes:
+- for pre-2000 `C`: `faceoffWinPctg`, `avgTimeOnIcePerGame`
 - for pre-2000 `D`: `avgTimeOnIcePerGame`
 
 ### Cross-Position Calibration
-A post-curve calibration layer now compresses very high defenseman and goalie ratings so they compare more reasonably against centers and wingers in lineup scoring.
+A post-curve calibration layer compresses very high defenseman and goalie ratings so they compare more reasonably against centers and wingers in lineup scoring.
 
 Current post-curve factors above the `85` threshold:
 - `C`: unchanged
@@ -640,14 +730,14 @@ Current post-curve factors above the `85` threshold:
 This does not affect `rawScore` or within-role ordering. It only affects the final displayed/game `score` used in lineups and tiers.
 
 ### Rating Curves
-There are now separate rating curves for skaters and goalies.
+There are separate rating curves for skaters and goalies.
 
 Skater/default curve:
 - floor raw: `85.0`
 - low: `40.0`
 - mid: `70.0`
 - high: `99.0`
-- exponent: `1.6`
+- exponent: `1.35`
 
 Goalie curve:
 - floor raw: `80.0`
@@ -658,8 +748,22 @@ Goalie curve:
 
 Reason for the goalie-specific curve:
 - the original curve produced overly harsh goalie dropoff
-- for example, elite-but-not-very-top goalies were collapsing into the low `70s`
-- the softer goalie curve now preserves separation without overpunishing very good goalies
+- elite-but-not-very-top goalies were collapsing too hard
+- the softer goalie curve preserves separation without overpunishing very good goalies
+
+### Selke Bonus
+Selke is now the only tracked award that affects ratings.
+
+Current behavior:
+- winner-only
+- compounded across multiple wins
+- no finalist bonus
+- capped at `3.5`
+
+Current constants:
+- `SELKE_BONUS_BASE = 0.5`
+- `SELKE_BONUS_GROWTH = 1.35`
+- `SELKE_BONUS_CAP = 3.5`
 
 ### Letter Grades
 Lineup `totalScore` is the average of the 6 displayed player scores.
@@ -697,6 +801,10 @@ Important client state includes:
 - `shuffleFrame`
 - `hardMode`
 - `hardModeLocked`
+- `twentiesMode`
+- `twentiesModeLocked`
+- `theme`
+- `runHistory`
 - `rerollTeamUsed`
 - `rerollDecadeUsed`
 - `rerollDrawUsed`
@@ -707,32 +815,41 @@ Important client state includes:
 - shuffling is visual only and delayed to feel game-like
 - position filter chips (`All`, `C`, `W`, `D`, `G`) are client-side only
 - candidate filtering resets to `ALL` after every new draw or reroll
-- result rendering is now share-card-first
+- results are share-card-first
 - post-run results can reveal the exact best possible lineup from the six accepted draw boards
-- hard mode is selected before the first draw and locks for the rest of the run
+- hard mode and `2020s Mode` are selected before the first draw and lock for the rest of the run
+- local run history is stored in `localStorage`
+- theme selection is stored in `localStorage`
 
 ### Candidate Card UX
 Current cards show:
 - player headshot
-- team abbreviation
-- coarse `Tier N` badge
-- position pill
+- combined `position · tier` badge
 - player name
-- historical team name
 - visible role-specific stats
+- awards / trophy badges
 
 Hard mode cards only show:
 - player headshot
-- team abbreviation
-- position pill
+- position badge
 - player name
-- historical team name
 
 ### Share Card UX
 The final share card currently includes:
-- linecraft logo
+- `linecraft` logo
+- mode notes when applicable:
+  - `Blind draft run`
+  - `locked to 2020s draws`
 - combined decades used in the lineup
 - cumulative `P`, `G`, `A` totals across the lineup
+- cumulative winner-level accolade totals across the lineup:
+  - `🏆`
+  - `MVP`
+  - `Art Ross`
+  - `Rocket`
+  - `Selke`
+  - `Norris`
+  - `Vezina`
 - one row per player with:
   - slot pill
   - player headshot
@@ -742,10 +859,23 @@ The final share card currently includes:
   - per-player score
 - bottom-right footer `linecraft.lol`
 
-Important recent cleanup:
-- the duplicate result header above the share card was removed
-- the share card now owns the primary score presentation
-- the numeric lineup score is emphasized more than the letter grade
+Important details:
+- finalist-only awards are intentionally excluded from the cumulative accolade strip
+- the cumulative summary block was spaced separately to avoid overlap with player rows
+- the share card owns the primary score presentation
+
+### Local Run History
+There is now a local run history card backed by `localStorage`.
+
+It stores recent runs with:
+- grade
+- score
+- decades used
+- hard mode flag
+- `2020s Mode` flag
+- timestamp
+
+The history card also includes a clear button.
 
 ### Mobile Behavior
 The current UI has several mobile-specific optimizations:
@@ -756,18 +886,28 @@ The current UI has several mobile-specific optimizations:
 - reduced share-card height
 - denser candidate cards
 - smaller chips and type
+- compact theme toggle and mode row
 
 ## Current Template / Copy Notes
 `app/templates/index.html` currently contains:
 - eyebrow: `Historical Franchise Mode`
 - updated hero subtitle:
   - `Build a lineup from random NHL franchise-and-decade draws, then get graded by how each pick stacks up against players from the same decade at that position.`
-- hero chips:
-  - `6 picks`
-  - `1980s to 2020s`
+- top-right controls:
+  - theme toggle
+  - `Start Over`
+- centered mode toggles:
   - `Hard Mode`
-  - `Start Over Run`
+  - `2020s Mode`
 - footer disclaimer and credit
+
+## Reports / Calibration Artifacts
+The repo currently contains useful model-tuning reports in `reports/`:
+- `reports/center_rebalance_v19.md`
+- `reports/center_rebalance_v20.md`
+- `reports/per_game_dominance_comparison.md`
+
+These are not runtime inputs. They are inspection artifacts for score tuning and ranking comparison.
 
 ## Testing Surface
 
@@ -785,6 +925,7 @@ Covers:
 - hidden admin dashboard access
 - Cup-badge team-stint matching
 - best-lineup optimization from accepted boards
+- tracked awards including Selke graphics
 
 ### `tests/test_scoring.py`
 Covers:
@@ -798,11 +939,12 @@ Covers:
 - tier mapping
 - cross-position calibration
 - totals/rate metric inclusion and exclusion
-- TOI exclusion pre-2000
+- TOI / FO% exclusion pre-2000
 - hybrid role scoring
+- Selke bonus behavior
 
 ## Known Technical Debt / Caveats
-- `README.md` is partially stale. It still mentions projected record as a visible product behavior even though the UI no longer shows it.
+- `README.md` may lag behind the live product in some UI details; check app code first.
 - API still returns `projectedRecord`, but frontend ignores it.
 - Normal-mode and hard-mode reroll budgets are enforced in the frontend only.
 - Candidate ordering is by `gamesPlayed` in normal mode and alphabetically in hard mode, not by rating, which is intentional but may not match user intuition.
@@ -812,15 +954,16 @@ Covers:
 - There is no DB migration system, no deploy-specific config, and no analytics.
 
 ## Safe Places To Modify Common Features
-- scoring weights / curves: `app/constants.py`, `app/scoring.py`
+- scoring weights / curves / award bonuses: `app/constants.py`, `app/scoring.py`
 - historical aggregation rules: `app/nhl_service.py`
 - draw payload shape: `app/nhl_service.py`, `app/models.py`, `app/static/app.js`, tests
 - UI copy/layout: `app/templates/index.html`, `app/static/styles.css`, `app/static/app.js`
 - persistence behavior: `app/historical_store.py`, `app/prewarm_historical.py`
+- admin data views: `app/main.py`, `app/templates/admin.html`, `app/nhl_service.py`
 
 ## Current Version Markers
 At time of this handoff:
 - `SCHEMA_VERSION = historical-cache-v2`
-- `SCORING_VERSION = historical-hybrid-70-30-v15`
+- `SCORING_VERSION = historical-hybrid-70-30-v20`
 
 Any scoring change that affects derived team-decade pools or leaderboards should usually bump `SCORING_VERSION` so stale SQLite-derived payloads are not reused.

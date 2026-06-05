@@ -21,14 +21,27 @@
           <div class="brand-lockup">
             <img class="brand-logo" src="/static/logo.png" alt="linecraft logo">
           </div>
-          <p class="hero-text">
-            Build a lineup from random NHL franchise-and-decade draws, then get graded by how each pick stacks up against players from the same decade at that position.
-          </p>
         </div>
         <div class="hero-summary">
+          <details class="info-panel hero-info-panel">
+            <summary class="info-summary" aria-label="Game info" title="Game info">
+              <span class="info-summary-icon" aria-hidden="true">i</span>
+            </summary>
+            <div class="info-body">
+              <p>
+                Build a six-player lineup in this slot order: <strong>C</strong>, <strong>W</strong>, <strong>W</strong>, <strong>D</strong>, <strong>D</strong>, <strong>G</strong>. Each draw gives you one franchise-and-decade player pool, and you can take any player from that pool whose position still fits an open slot.
+              </p>
+              <p>
+                Normal runs give you one <strong>Reroll Team</strong> and one <strong>Reroll Decade</strong>. <strong>Hard Mode</strong> hides player stats, tiers, and awards during the draft and replaces those with one shared reroll. <strong>2020s Mode</strong> locks every draw to the current decade.
+              </p>
+              <p>
+                Grading is era- and position-relative. Each player is scored against players from the <strong>same decade</strong> and <strong>same role</strong>, using a blend of decade totals and per-game production. Your final lineup grade is the average of all six player ratings. Tiers are only broad hints, not exact scores.
+              </p>
+            </div>
+          </details>
           <div class="summary-chip">6 picks</div>
           <div class="summary-chip">1980s to 2020s</div>
-          <button id="new-run-button" class="summary-chip summary-action" type="button">Start Over Run</button>
+          <button id="new-run-button" class="summary-chip summary-action" type="button">Start Over</button>
         </div>
       </header>
 

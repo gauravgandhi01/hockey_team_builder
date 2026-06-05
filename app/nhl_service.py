@@ -18,6 +18,7 @@ from app.constants import (
     DECADE_LABELS,
     DEFAULT_DB_PATH,
     HEADSHOT_FALLBACK_TEMPLATE,
+    LOCAL_LOGO_OVERRIDES,
     LOGO_URL_TEMPLATE,
     MIN_DECADE_GAMES,
     SCORING_VERSION,
@@ -82,6 +83,8 @@ def summarize_draw_provenance(pool_source: str, leaderboard_sources: dict[str, s
 
 
 def logo_url(abbrev: str) -> str:
+    if abbrev in LOCAL_LOGO_OVERRIDES:
+        return LOCAL_LOGO_OVERRIDES[abbrev]
     return LOGO_URL_TEMPLATE.format(abbrev=abbrev)
 
 

@@ -1,8 +1,23 @@
 const SLOT_SEQUENCE = ["C", "W", "W", "D", "D", "G"];
 const RUN_HISTORY_STORAGE_KEY = "linecraft_run_history_v1";
+const RUN_STATS_STORAGE_KEY = "linecraft_run_stats_v1";
 const THEME_STORAGE_KEY = "linecraft_theme_v1";
 const RUN_HISTORY_LIMIT = 8;
 const CUMULATIVE_AWARD_ORDER = ["cup", "mvp", "art-ross", "rocket", "selke", "norris", "vezina"];
+const TRACKED_MODE_KEYS = ["standard", "hard", "twenties", "hard_twenties"];
+const BEST_LINEUP_METRIC_KEYS = ["points", "goals", "assists", "awards"];
+const MODE_LABELS = {
+  standard: "Standard",
+  hard: "Hard Mode",
+  twenties: "2020s Mode",
+  hard_twenties: "Hard + 2020s",
+};
+const BEST_LINEUP_METRIC_LABELS = {
+  points: "Most combined points",
+  goals: "Most combined goals",
+  assists: "Most combined assists",
+  awards: "Most awards",
+};
 const SLOT_LABELS = {
   C: "Center",
   W: "Winger",
@@ -54,10 +69,17 @@ const SHUFFLE_TEAMS = [
   logo: `https://assets.nhle.com/logos/nhl/svg/${team.abbrev}_light.svg`,
 }));
 
+const LOCAL_LOGO_OVERRIDES = {
+  ATL: "/static/thrashers.gif",
+  MNS: "/static/north_stars.png",
+  QUE: "/static/nordiques.png",
+};
+
 const state = {
   lineup: [],
   acceptedBoards: [],
   runHistory: [],
+  runStats: null,
   currentIndex: 0,
   currentDraw: null,
   result: null,
@@ -171,6 +193,272 @@ function loadRunHistory() {
   }
 }
 
+function emptyRunStats() {
+  return {
+    totalRuns: 0,
+    bestOverall: null,
+    runsByMode: Object.fromEntries(TRACKED_MODE_KEYS.map((key) => [key, 0])),
+    bestByMode: Object.fromEntries(TRACKED_MODE_KEYS.map((key) => [key, null])),
+    bestByMetric: Object.fromEntries(BEST_LINEUP_METRIC_KEYS.map((key) => [key, null])),
+  };
+}
+
+function normalizeLineupTotals(rawTotals) {
+  if (!rawTotals || typeof rawTotals !== "object") {
+    return {
+      points: null,
+      goals: null,
+      assists: null,
+      awards: null,
+    };
+  }
+
+  const normalized = {};
+  for (const key of BEST_LINEUP_METRIC_KEYS) {
+    const value = Number(rawTotals[key]);
+    normalized[key] = Number.isFinite(value) ? value : null;
+  }
+  return normalized;
+}
+
+function modeKeyFromFlags(hardMode, twentiesMode) {
+  if (hardMode && twentiesMode) {
+    return "hard_twenties";
+  }
+  if (hardMode) {
+    return "hard";
+  }
+  if (twentiesMode) {
+    return "twenties";
+  }
+  return "standard";
+}
+
+function normalizeRunStats(raw) {
+  const base = emptyRunStats();
+  if (!raw || typeof raw !== "object") {
+    return base;
+  }
+
+  const bestOverall = raw.bestOverall && typeof raw.bestOverall === "object" ? raw.bestOverall : null;
+  const runsByMode = { ...base.runsByMode };
+  const bestByMode = { ...base.bestByMode };
+  const bestByMetric = { ...base.bestByMetric };
+
+  for (const key of TRACKED_MODE_KEYS) {
+    const count = Number(raw.runsByMode?.[key]);
+    runsByMode[key] = Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
+    bestByMode[key] = raw.bestByMode?.[key] && typeof raw.bestByMode[key] === "object"
+      ? raw.bestByMode[key]
+      : null;
+  }
+
+  for (const key of BEST_LINEUP_METRIC_KEYS) {
+    bestByMetric[key] = raw.bestByMetric?.[key] && typeof raw.bestByMetric[key] === "object"
+      ? raw.bestByMetric[key]
+      : null;
+  }
+
+  const totalRuns = Number(raw.totalRuns);
+  return {
+    totalRuns: Number.isFinite(totalRuns) && totalRuns > 0
+      ? Math.floor(totalRuns)
+      : Object.values(runsByMode).reduce((sum, value) => sum + value, 0),
+    bestOverall,
+    runsByMode,
+    bestByMode,
+    bestByMetric,
+  };
+}
+
+function buildRunStatEntry(entry) {
+  if (!entry) {
+    return null;
+  }
+  const picks = Array.isArray(entry.picks) ? entry.picks : [];
+  return {
+    savedAt: entry.savedAt || new Date().toISOString(),
+    hardMode: Boolean(entry.hardMode),
+    twentiesMode: Boolean(entry.twentiesMode),
+    letterGrade: entry.letterGrade || "F",
+    totalScore: Number(entry.totalScore || 0),
+    decades: Array.isArray(entry.decades) ? entry.decades : [],
+    playerLastNames: picks
+      .map((pick) => String(pick?.fullName || "").trim().split(/\s+/).pop())
+      .filter(Boolean),
+    lineupTotals: normalizeLineupTotals(entry.lineupTotals),
+    modeKey: modeKeyFromFlags(Boolean(entry.hardMode), Boolean(entry.twentiesMode)),
+  };
+}
+
+function metricValue(entry, metricKey) {
+  const value = Number(entry?.lineupTotals?.[metricKey]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function pickBetterMetricRun(metricKey, current, candidate) {
+  if (!candidate) {
+    return current;
+  }
+  const candidateValue = metricValue(candidate, metricKey);
+  if (candidateValue === null) {
+    return current;
+  }
+  if (!current) {
+    return candidate;
+  }
+  const currentValue = metricValue(current, metricKey);
+  if (currentValue === null || candidateValue > currentValue) {
+    return candidate;
+  }
+  if (candidateValue < currentValue) {
+    return current;
+  }
+  const currentScore = Number(current.totalScore || 0);
+  const candidateScore = Number(candidate.totalScore || 0);
+  if (candidateScore !== currentScore) {
+    return candidateScore > currentScore ? candidate : current;
+  }
+  return new Date(candidate.savedAt).getTime() >= new Date(current.savedAt).getTime()
+    ? candidate
+    : current;
+}
+
+function sameModeKeyForEntry(entry, modeKey) {
+  return modeKeyFromFlags(Boolean(entry?.hardMode), Boolean(entry?.twentiesMode)) === modeKey;
+}
+
+function findMatchingHistoryEntry(target, historyEntries = []) {
+  if (!target) {
+    return null;
+  }
+
+  const targetScore = Number(target.totalScore || 0);
+  const modeKey = target.modeKey || modeKeyFromFlags(Boolean(target.hardMode), Boolean(target.twentiesMode));
+
+  let exact = historyEntries.find((entry) => entry?.savedAt && entry.savedAt === target.savedAt);
+  if (exact) {
+    return exact;
+  }
+
+  exact = historyEntries.find((entry) => (
+    sameModeKeyForEntry(entry, modeKey)
+    && Number(entry.totalScore || 0) === targetScore
+    && String(entry.letterGrade || "") === String(target.letterGrade || "")
+  ));
+  if (exact) {
+    return exact;
+  }
+
+  const ranked = historyEntries
+    .filter((entry) => sameModeKeyForEntry(entry, modeKey))
+    .sort((left, right) => Number(right.totalScore || 0) - Number(left.totalScore || 0));
+  return ranked[0] || null;
+}
+
+function hydrateStatEntry(entry, historyEntries = []) {
+  if (!entry) {
+    return null;
+  }
+  if (Array.isArray(entry.playerLastNames) && entry.playerLastNames.length) {
+    return entry;
+  }
+  const match = findMatchingHistoryEntry(entry, historyEntries);
+  if (!match) {
+    return entry;
+  }
+  const hydrated = buildRunStatEntry(match);
+  return {
+    ...entry,
+    playerLastNames: hydrated.playerLastNames,
+    savedAt: entry.savedAt || hydrated.savedAt,
+  };
+}
+
+function hydrateRunStats(stats, historyEntries = []) {
+  const hydrated = {
+    ...stats,
+    bestOverall: hydrateStatEntry(stats.bestOverall, historyEntries),
+    bestByMode: { ...stats.bestByMode },
+    bestByMetric: { ...stats.bestByMetric },
+  };
+
+  for (const modeKey of TRACKED_MODE_KEYS) {
+    hydrated.bestByMode[modeKey] = hydrateStatEntry(stats.bestByMode?.[modeKey], historyEntries);
+  }
+
+  for (const metricKey of BEST_LINEUP_METRIC_KEYS) {
+    hydrated.bestByMetric[metricKey] = hydrateStatEntry(stats.bestByMetric?.[metricKey], historyEntries);
+  }
+
+  if (!hydrated.bestOverall) {
+    const bestCandidates = Object.values(hydrated.bestByMode).filter(Boolean);
+    hydrated.bestOverall = bestCandidates.reduce((best, candidate) => pickBetterRun(best, candidate), null);
+  }
+
+  return hydrated;
+}
+
+function pickBetterRun(current, candidate) {
+  if (!candidate) {
+    return current;
+  }
+  if (!current) {
+    return candidate;
+  }
+  const currentScore = Number(current.totalScore || 0);
+  const candidateScore = Number(candidate.totalScore || 0);
+  if (candidateScore > currentScore) {
+    return candidate;
+  }
+  if (candidateScore < currentScore) {
+    return current;
+  }
+  return new Date(candidate.savedAt).getTime() >= new Date(current.savedAt).getTime()
+    ? candidate
+    : current;
+}
+
+function deriveRunStats(historyEntries) {
+  const stats = emptyRunStats();
+  for (const entry of historyEntries || []) {
+    const statEntry = buildRunStatEntry(entry);
+    if (!statEntry) {
+      continue;
+    }
+    stats.totalRuns += 1;
+    stats.runsByMode[statEntry.modeKey] += 1;
+    stats.bestOverall = pickBetterRun(stats.bestOverall, statEntry);
+    stats.bestByMode[statEntry.modeKey] = pickBetterRun(stats.bestByMode[statEntry.modeKey], statEntry);
+    for (const metricKey of BEST_LINEUP_METRIC_KEYS) {
+      stats.bestByMetric[metricKey] = pickBetterMetricRun(metricKey, stats.bestByMetric[metricKey], statEntry);
+    }
+  }
+  return stats;
+}
+
+function loadRunStats(historyEntries = []) {
+  try {
+    const raw = window.localStorage.getItem(RUN_STATS_STORAGE_KEY);
+    if (!raw) {
+      const derived = deriveRunStats(historyEntries);
+      const hydratedDerived = hydrateRunStats(derived, historyEntries);
+      if (hydratedDerived.totalRuns) {
+        window.localStorage.setItem(RUN_STATS_STORAGE_KEY, JSON.stringify(hydratedDerived));
+      }
+      return hydratedDerived;
+    }
+    const normalized = normalizeRunStats(JSON.parse(raw));
+    const hydrated = hydrateRunStats(normalized, historyEntries);
+    if (JSON.stringify(hydrated) !== JSON.stringify(normalized)) {
+      window.localStorage.setItem(RUN_STATS_STORAGE_KEY, JSON.stringify(hydrated));
+    }
+    return hydrated;
+  } catch (_error) {
+    return hydrateRunStats(deriveRunStats(historyEntries), historyEntries);
+  }
+}
+
 function loadTheme() {
   try {
     const raw = window.localStorage.getItem(THEME_STORAGE_KEY);
@@ -186,6 +474,27 @@ function persistTheme(theme) {
   } catch (_error) {
     // Ignore storage failures; theme persistence is a UX enhancement only.
   }
+}
+
+function persistRunStats(stats) {
+  state.runStats = stats;
+  try {
+    window.localStorage.setItem(RUN_STATS_STORAGE_KEY, JSON.stringify(stats));
+  } catch (_error) {
+    // Ignore storage failures; local stat tracking is a UX enhancement only.
+  }
+}
+
+function buildLineupTotalsSummary(result) {
+  const breakdown = result?.lineupBreakdown || [];
+  const totals = cumulativeLineupTotals(breakdown);
+  const awards = cumulativeLineupAwards(breakdown);
+  return {
+    points: totals.points,
+    goals: totals.goals,
+    assists: totals.assists,
+    awards: awards.reduce((sum, award) => sum + Number(award.count || 0), 0),
+  };
 }
 
 function persistRunHistory(entries) {
@@ -210,6 +519,7 @@ function recordRunHistory(result) {
     letterGrade: result.letterGrade,
     totalScore: result.totalScore,
     decades: [...new Set(breakdown.map((item) => item.decade))],
+    lineupTotals: buildLineupTotalsSummary(result),
     picks: breakdown.map((item) => ({
       slot: item.slot,
       fullName: item.fullName,
@@ -219,10 +529,26 @@ function recordRunHistory(result) {
   };
   const nextHistory = [entry, ...loadRunHistory()].slice(0, RUN_HISTORY_LIMIT);
   persistRunHistory(nextHistory);
+
+  const nextStats = normalizeRunStats(state.runStats || emptyRunStats());
+  const statEntry = buildRunStatEntry(entry);
+  nextStats.totalRuns += 1;
+  nextStats.runsByMode[statEntry.modeKey] += 1;
+  nextStats.bestOverall = pickBetterRun(nextStats.bestOverall, statEntry);
+  nextStats.bestByMode[statEntry.modeKey] = pickBetterRun(nextStats.bestByMode[statEntry.modeKey], statEntry);
+  for (const metricKey of BEST_LINEUP_METRIC_KEYS) {
+    nextStats.bestByMetric[metricKey] = pickBetterMetricRun(metricKey, nextStats.bestByMetric[metricKey], statEntry);
+  }
+  persistRunStats(nextStats);
 }
 
 function clearRunHistory() {
   persistRunHistory([]);
+  renderResults();
+}
+
+function resetRunStats() {
+  persistRunStats(emptyRunStats());
   renderResults();
 }
 
@@ -348,6 +674,7 @@ async function startNewRun() {
   initializeLineup();
   state.acceptedBoards = [];
   state.runHistory = loadRunHistory();
+  state.runStats = loadRunStats(state.runHistory);
   state.currentIndex = 0;
   state.currentDraw = null;
   state.result = null;
@@ -661,10 +988,9 @@ function renderLineup() {
     .map((entry) => {
       if (!entry.pick) {
         return `
-          <article class="lineup-slot open ${positionToneClass(entry.slot)}">
+          <article class="lineup-slot open ${positionToneClass(entry.slot)}" aria-label="Open ${SLOT_LABELS[entry.slot]} slot">
             <div class="slot-topline">
               <span class="slot-badge ${positionToneClass(entry.slot)}">${entry.slot}</span>
-              <span class="slot-label">${SLOT_LABELS[entry.slot]}</span>
             </div>
             <p class="slot-empty">Open</p>
           </article>
@@ -672,16 +998,15 @@ function renderLineup() {
       }
 
       return `
-        <article class="lineup-slot locked ${positionToneClass(entry.slot)}">
+        <article class="lineup-slot locked ${positionToneClass(entry.slot)}" aria-label="${SLOT_LABELS[entry.slot]}: ${entry.pick.fullName}">
           <div class="slot-topline">
             <span class="slot-badge ${positionToneClass(entry.slot)}">${entry.slot}</span>
-            <span class="slot-label">${SLOT_LABELS[entry.slot]}</span>
           </div>
           <div class="picked-player">
             <img src="${entry.pick.headshot}" alt="${entry.pick.fullName}">
             <div>
               <h3>${entry.pick.fullName}</h3>
-              <p>${entry.pick.teamAbbrev} · ${entry.pick.decade} · ${entry.pick.positionCode}</p>
+              <p>${entry.pick.teamAbbrev} · ${entry.pick.decade}</p>
             </div>
           </div>
         </article>
@@ -1044,6 +1369,9 @@ function statSummaryMarkup(stats) {
 }
 
 function teamLogoUrl(teamAbbrev) {
+  if (LOCAL_LOGO_OVERRIDES[teamAbbrev]) {
+    return LOCAL_LOGO_OVERRIDES[teamAbbrev];
+  }
   return `https://assets.nhle.com/logos/nhl/svg/${teamAbbrev}_light.svg`;
 }
 
@@ -1258,6 +1586,114 @@ function runHistoryMarkup() {
   `;
 }
 
+function localBestRowsMarkup() {
+  const stats = state.runStats || emptyRunStats();
+  return TRACKED_MODE_KEYS.map((modeKey) => {
+    const best = stats.bestByMode?.[modeKey];
+    const count = Number(stats.runsByMode?.[modeKey] || 0);
+    const playerNames = Array.isArray(best?.playerLastNames) && best.playerLastNames.length
+      ? best.playerLastNames.join(" • ")
+      : null;
+    return `
+      <article class="local-best-row">
+        <div class="local-best-copy">
+          <div class="local-best-topline">
+            <strong>${MODE_LABELS[modeKey]}</strong>
+            <span class="local-best-count">${count} run${count === 1 ? "" : "s"}</span>
+          </div>
+          <span class="local-best-meta">${best ? (playerNames || "Saved best lineup") : "No saved best yet"}</span>
+        </div>
+        ${best ? `
+          <div class="local-best-score-block">
+            <span class="run-history-grade">${best.letterGrade}</span>
+            <strong>${best.totalScore}</strong>
+          </div>
+        ` : '<span class="local-best-empty">—</span>'}
+      </article>
+    `;
+  }).join("");
+}
+
+function bestMetricValueMarkup(metricKey, entry) {
+  const value = metricValue(entry, metricKey);
+  if (value === null) {
+    return '<span class="local-best-empty">—</span>';
+  }
+  if (metricKey === "points") {
+    return `<strong>P ${value}</strong>`;
+  }
+  if (metricKey === "goals") {
+    return `<strong>G ${value}</strong>`;
+  }
+  if (metricKey === "assists") {
+    return `<strong>A ${value}</strong>`;
+  }
+  return `<strong>${value} ${value === 1 ? "award" : "awards"}</strong>`;
+}
+
+function bestMetricRowsMarkup() {
+  const stats = state.runStats || emptyRunStats();
+  return BEST_LINEUP_METRIC_KEYS.map((metricKey) => {
+    const best = stats.bestByMetric?.[metricKey];
+    const playerNames = Array.isArray(best?.playerLastNames) && best.playerLastNames.length
+      ? best.playerLastNames.join(" • ")
+      : null;
+    return `
+      <article class="local-best-row metric-row">
+        <div class="local-best-copy">
+          <div class="local-best-topline">
+            <strong>${BEST_LINEUP_METRIC_LABELS[metricKey]}</strong>
+          </div>
+          <span class="local-best-meta">${best ? (playerNames || "Will populate on a future completed run") : "No saved lineup yet"}</span>
+        </div>
+        <div class="local-best-score-block metric-block">
+          ${bestMetricValueMarkup(metricKey, best)}
+        </div>
+      </article>
+    `;
+  }).join("");
+}
+
+function localBestMarkup() {
+  const stats = state.runStats || emptyRunStats();
+  if (!stats.totalRuns) {
+    return "";
+  }
+  const overall = stats.bestOverall;
+  return `
+    <section class="local-best-card compact-card">
+      <div class="run-history-header local-best-header">
+        <div>
+          <p class="panel-kicker">Your Best Runs</p>
+          <h3>Across every mode</h3>
+        </div>
+        <button id="reset-run-stats-button" class="ghost-button history-clear-button" type="button">Reset</button>
+      </div>
+      <div class="local-best-overview">
+        <div class="local-best-overview-copy">
+          <strong>Overall best</strong>
+          <span>${stats.totalRuns} total run${stats.totalRuns === 1 ? "" : "s"}</span>
+        </div>
+        ${overall ? `
+          <div class="local-best-score-block overall">
+            <span class="run-history-grade">${overall.letterGrade}</span>
+            <strong>${overall.totalScore}</strong>
+          </div>
+        ` : ""}
+      </div>
+      <div class="local-best-list">
+        ${localBestRowsMarkup()}
+      </div>
+      <div class="local-best-secondary">
+        <p class="panel-kicker">Lineup Records</p>
+        <div class="local-best-list">
+          ${bestMetricRowsMarkup()}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 function bestPossibleControlsMarkup() {
   if (!state.result) {
     return "";
@@ -1323,17 +1759,18 @@ function bestPossibleMarkup() {
 }
 
 function renderResults() {
-  if (!state.result) {
-    resultPanel.innerHTML = "";
-    return;
-  }
+  const persistentMarkup = localBestMarkup();
 
-  resultPanel.innerHTML = `
-    ${shareCardMarkup()}
-    ${bestPossibleControlsMarkup()}
-    ${bestPossibleMarkup()}
-    ${runHistoryMarkup()}
-  `;
+  if (!state.result) {
+    resultPanel.innerHTML = persistentMarkup;
+  } else {
+    resultPanel.innerHTML = `
+      ${shareCardMarkup()}
+      ${bestPossibleControlsMarkup()}
+      ${bestPossibleMarkup()}
+      ${persistentMarkup}
+    `;
+  }
 
   const bestPossibleButton = document.getElementById("best-possible-button");
   if (bestPossibleButton) {
@@ -1341,10 +1778,10 @@ function renderResults() {
       await toggleBestPossible();
     });
   }
-  const clearHistoryButton = document.getElementById("clear-history-button");
-  if (clearHistoryButton) {
-    clearHistoryButton.addEventListener("click", () => {
-      clearRunHistory();
+  const resetRunStatsButton = document.getElementById("reset-run-stats-button");
+  if (resetRunStatsButton) {
+    resetRunStatsButton.addEventListener("click", () => {
+      resetRunStats();
     });
   }
 }
@@ -1362,4 +1799,6 @@ function render() {
 }
 
 state.theme = loadTheme();
+state.runHistory = loadRunHistory();
+state.runStats = loadRunStats(state.runHistory);
 startNewRun();
