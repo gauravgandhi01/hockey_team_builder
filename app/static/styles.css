@@ -1832,7 +1832,8 @@ body[data-theme="light"] .run-history-card {
 
 .local-best-meta {
   line-height: 1.35;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .local-best-topline {
@@ -2399,9 +2400,23 @@ body[data-theme="light"] .run-history-mode {
     flex-direction: column;
   }
 
+  .local-best-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .local-best-copy {
+    width: 100%;
+  }
+
   .local-best-score-block {
     width: 100%;
     justify-content: flex-start;
+  }
+
+  .local-best-row .local-best-score-block {
+    width: auto;
   }
 
   .run-history-row {
