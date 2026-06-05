@@ -1,5 +1,6 @@
 const SLOT_SEQUENCE = ["C", "W", "W", "D", "D", "G"];
 const RUN_HISTORY_STORAGE_KEY = "linecraft_run_history_v1";
+const THEME_STORAGE_KEY = "linecraft_theme_v1";
 const RUN_HISTORY_LIMIT = 8;
 const SLOT_LABELS = {
   C: "Center",
@@ -74,6 +75,7 @@ const state = {
   rerollTeamUsed: false,
   rerollDecadeUsed: false,
   candidateFilter: "ALL",
+  theme: "dark",
 };
 
 const lineupBoard = document.getElementById("lineup-board");
@@ -84,6 +86,7 @@ const candidateFilters = document.getElementById("candidate-filters");
 const candidateGrid = document.getElementById("candidate-grid");
 const resultPanel = document.getElementById("result-panel");
 const statusBanner = document.getElementById("status-banner");
+const themeToggleButton = document.getElementById("theme-toggle-button");
 const hardModeToggleButton = document.getElementById("hard-mode-toggle");
 const twentiesModeToggleButton = document.getElementById("twenties-mode-toggle");
 const newRunButton = document.getElementById("new-run-button");
@@ -98,6 +101,12 @@ const rerollDecadeButton = document.getElementById("reroll-decade-button");
 newRunButton.addEventListener("click", () => {
   startNewRun();
 });
+
+if (themeToggleButton) {
+  themeToggleButton.addEventListener("click", () => {
+    toggleTheme();
+  });
+}
 
 if (hardModeToggleButton) {
   hardModeToggleButton.addEventListener("click", () => {
@@ -158,6 +167,23 @@ function loadRunHistory() {
   }
 }
 
+function loadTheme() {
+  try {
+    const raw = window.localStorage.getItem(THEME_STORAGE_KEY);
+    return raw === "light" ? "light" : "dark";
+  } catch (_error) {
+    return "dark";
+  }
+}
+
+function persistTheme(theme) {
+  try {
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  } catch (_error) {
+    // Ignore storage failures; theme persistence is a UX enhancement only.
+  }
+}
+
 function persistRunHistory(entries) {
   state.runHistory = entries;
   try {
@@ -194,6 +220,12 @@ function recordRunHistory(result) {
 function clearRunHistory() {
   persistRunHistory([]);
   renderResults();
+}
+
+function toggleTheme() {
+  state.theme = state.theme === "light" ? "dark" : "light";
+  persistTheme(state.theme);
+  render();
 }
 
 function canToggleRunModes() {
@@ -539,6 +571,20 @@ function renderStatus() {
   }
   statusBanner.hidden = true;
   statusBanner.textContent = "";
+}
+
+function applyTheme() {
+  document.body.dataset.theme = state.theme;
+}
+
+function renderThemeToggle() {
+  if (!themeToggleButton) {
+    return;
+  }
+  const isLight = state.theme === "light";
+  themeToggleButton.textContent = isLight ? "Light" : "Dark";
+  themeToggleButton.setAttribute("aria-pressed", isLight ? "true" : "false");
+  themeToggleButton.classList.toggle("active", isLight);
 }
 
 function renderHardModeToggle() {
@@ -1210,6 +1256,8 @@ function renderResults() {
 }
 
 function render() {
+  applyTheme();
+  renderThemeToggle();
   renderHardModeToggle();
   renderTwentiesModeToggle();
   renderStatus();
@@ -1219,4 +1267,5 @@ function render() {
   renderResults();
 }
 
+state.theme = loadTheme();
 startNewRun();

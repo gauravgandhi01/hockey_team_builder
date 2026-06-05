@@ -8,6 +8,7 @@ from app.scoring import (
     rate_metric_weights,
     rate_metrics,
     rating_tier,
+    selke_bonus,
     score_role_players,
     totals_metric_weights,
     totals_metrics,
@@ -79,6 +80,17 @@ def test_cross_position_adjust_preserves_forwards_and_compresses_d_and_g():
     assert cross_position_adjust(99.0, "G") == 98.2
     assert cross_position_adjust(92.9, "G") == 92.4
     assert cross_position_adjust(84.9, "D") == 84.9
+
+
+def test_selke_bonus_compounds_and_caps():
+    assert selke_bonus(None) == 0.0
+    assert selke_bonus([]) == 0.0
+    assert selke_bonus([{"key": "selke", "level": "finalist", "count": 2}]) == 0.0
+    assert selke_bonus([{"key": "selke", "level": "winner", "count": 1}]) == 0.5
+    assert selke_bonus([{"key": "selke", "level": "winner", "count": 2}]) == 1.2
+    assert selke_bonus([{"key": "selke", "level": "winner", "count": 3}]) == 2.1
+    assert selke_bonus([{"key": "selke", "level": "winner", "count": 4}]) == 3.3
+    assert selke_bonus([{"key": "selke", "level": "winner", "count": 5}]) == 3.5
 
 
 def test_rating_tier_uses_coarse_bands():
@@ -179,6 +191,7 @@ def test_score_role_players_builds_hybrid_scores():
             "candidateKey": "AAA:2000s:1:C",
             "playerId": 1,
             "fullName": "Player One",
+            "awards": [],
             "stats": {"gamesPlayed": 100, "points": 120, "assists": 70, "goals": 40, "shots": 260},
             "totalsMetrics": totals_metrics("C", {"gamesPlayed": 100, "points": 120, "assists": 70, "goals": 40, "shots": 260}),
             "rateMetrics": rate_metrics("C", {"gamesPlayed": 100, "points": 120, "assists": 70, "goals": 40, "shots": 260}),
@@ -187,6 +200,7 @@ def test_score_role_players_builds_hybrid_scores():
             "candidateKey": "AAA:2000s:2:C",
             "playerId": 2,
             "fullName": "Player Two",
+            "awards": [],
             "stats": {"gamesPlayed": 120, "points": 84, "assists": 42, "goals": 21, "shots": 180},
             "totalsMetrics": totals_metrics("C", {"gamesPlayed": 120, "points": 84, "assists": 42, "goals": 21, "shots": 180}),
             "rateMetrics": rate_metrics("C", {"gamesPlayed": 120, "points": 84, "assists": 42, "goals": 21, "shots": 180}),
@@ -206,3 +220,32 @@ def test_score_role_players_builds_hybrid_scores():
     assert scored["AAA:2000s:1:C"]["rateScore"] == 100.0
     assert scored["AAA:2000s:2:C"]["totalsScore"] == 0.0
     assert scored["AAA:2000s:2:C"]["rateScore"] == 0.0
+
+
+def test_score_role_players_applies_selke_bonus_after_curve():
+    players = [
+        {
+            "candidateKey": "AAA:2010s:1:C",
+            "playerId": 1,
+            "fullName": "Two Way Center",
+            "awards": [{"key": "selke", "label": "Selke", "level": "winner", "count": 3}],
+            "stats": {"gamesPlayed": 100, "points": 120, "assists": 70, "goals": 40, "shots": 260},
+            "totalsMetrics": totals_metrics("C", {"gamesPlayed": 100, "points": 120, "assists": 70, "goals": 40, "shots": 260}),
+            "rateMetrics": rate_metrics("C", {"gamesPlayed": 100, "points": 120, "assists": 70, "goals": 40, "shots": 260}),
+        },
+        {
+            "candidateKey": "AAA:2010s:2:C",
+            "playerId": 2,
+            "fullName": "Scoring Center",
+            "awards": [],
+            "stats": {"gamesPlayed": 120, "points": 84, "assists": 42, "goals": 21, "shots": 180},
+            "totalsMetrics": totals_metrics("C", {"gamesPlayed": 120, "points": 84, "assists": 42, "goals": 21, "shots": 180}),
+            "rateMetrics": rate_metrics("C", {"gamesPlayed": 120, "points": 84, "assists": 42, "goals": 21, "shots": 180}),
+        },
+    ]
+
+    scored = score_role_players("C", players)
+    assert scored["AAA:2010s:1:C"]["curveScore"] == 99.0
+    assert scored["AAA:2010s:1:C"]["calibratedScore"] == 99.0
+    assert scored["AAA:2010s:1:C"]["awardBonus"] == 2.1
+    assert scored["AAA:2010s:1:C"]["score"] == 99.0

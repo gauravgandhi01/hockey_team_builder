@@ -41,7 +41,7 @@ from app.scoring import (
 
 PRIMARY_POSITION_ORDER = {"C": 0, "L": 1, "R": 2, "D": 3, "G": 4}
 ROLE_ORDER = ["C", "W", "D", "G"]
-AWARD_CACHE_KEY = "tracked-awards-v1"
+AWARD_CACHE_KEY = "tracked-awards-v2"
 CUP_WINS_CACHE_KEY = "stanley-cup-wins-v1"
 ADMIN_SCORE_BUCKETS = [
     (95.0, "95+"),

@@ -84,6 +84,7 @@ class MockHistoricalApi:
                 {"playerId": 100, "fullName": "Alex Ovechkin", "seasonId": 20092010, "teamId": 15, "trophyId": 8, "status": "WINNER"},
                 {"playerId": 100, "fullName": "Alex Ovechkin", "seasonId": 20082009, "teamId": 15, "trophyId": 16, "status": "WINNER"},
                 {"playerId": 100, "fullName": "Alex Ovechkin", "seasonId": 20092010, "teamId": 15, "trophyId": 15, "status": "WINNER"},
+                {"playerId": 104, "fullName": "Brooks Laich", "seasonId": 20092010, "teamId": 15, "trophyId": 17, "status": "FINALIST"},
                 {"playerId": 103, "fullName": "Mike Green", "seasonId": 20082009, "teamId": 15, "trophyId": 11, "status": "FINALIST"},
                 {"playerId": 103, "fullName": "Mike Green", "seasonId": 20092010, "teamId": 15, "trophyId": 11, "status": "FINALIST"},
                 {"playerId": 105, "fullName": "Jose Theodore", "seasonId": 20092010, "teamId": 15, "trophyId": 18, "status": "FINALIST"},
@@ -371,6 +372,10 @@ def test_draw_endpoint_returns_wsh_2000s_candidates_sorted_by_games_played(tmp_p
     defenseman = next(entry for entry in body["candidates"] if entry["playerId"] == 103)
     assert defenseman["awards"] == [
         {"key": "norris", "label": "Norris", "level": "finalist", "count": 2},
+    ]
+    center = next(entry for entry in body["candidates"] if entry["playerId"] == 104)
+    assert center["awards"] == [
+        {"key": "selke", "label": "Selke", "level": "finalist", "count": 1},
     ]
 
 

@@ -20,6 +20,9 @@ from app.constants import (
     RATING_CURVE_HIGH,
     RATING_CURVE_LOW,
     RATING_CURVE_MID,
+    SELKE_BONUS_BASE,
+    SELKE_BONUS_CAP,
+    SELKE_BONUS_GROWTH,
     ROLE_SCORE_ADJUST_FACTORS,
     ROLE_CONFIG,
 )
@@ -120,6 +123,28 @@ def cross_position_adjust(score: float, role: str) -> float:
         + (score - CROSS_POSITION_CALIBRATION_FLOOR) * factor,
         1,
     )
+
+
+def selke_bonus(awards: list[dict[str, Any]] | None) -> float:
+    if not awards:
+        return 0.0
+    wins = next(
+        (
+            int(award.get("count") or 0)
+            for award in awards
+            if award.get("key") == "selke" and award.get("level") == "winner"
+        ),
+        0,
+    )
+    if wins <= 0:
+        return 0.0
+
+    bonus = 0.0
+    for index in range(wins):
+        bonus += SELKE_BONUS_BASE * (SELKE_BONUS_GROWTH**index)
+        if bonus >= SELKE_BONUS_CAP:
+            return round(SELKE_BONUS_CAP, 1)
+    return round(min(bonus, SELKE_BONUS_CAP), 1)
 
 
 def percentile_rank(values: list[float], target: float) -> float:
@@ -250,10 +275,15 @@ def score_role_players(
     for candidate_key, player in raw_scored.items():
         overall_percentile = round(percentile_rank(raw_score_values, player["rawScore"]) * 100, 1)
         curved_score = curve_rating(player["rawScore"], top_raw_score, role)
+        calibrated_score = cross_position_adjust(curved_score, role)
+        award_bonus = selke_bonus(player.get("awards"))
         scored[candidate_key] = {
             **player,
             "overallPercentile": overall_percentile,
             "ratingTier": rating_tier(overall_percentile),
-            "score": cross_position_adjust(curved_score, role),
+            "curveScore": round(curved_score, 1),
+            "calibratedScore": round(calibrated_score, 1),
+            "awardBonus": award_bonus,
+            "score": round(min(99.0, calibrated_score + award_bonus), 1),
         }
     return scored

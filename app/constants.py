@@ -26,6 +26,7 @@ DECADE_START_BY_LABEL = {label: start for start, label in DECADE_LABELS.items()}
 SKATER_TOI_TRACKING_START_SEASON = 19971998
 AWARD_TROPHIES = {
     8: {"key": "mvp", "label": "MVP", "allowFinalists": True},
+    17: {"key": "selke", "label": "Selke", "allowFinalists": True},
     11: {"key": "norris", "label": "Norris", "allowFinalists": True},
     18: {"key": "vezina", "label": "Vezina", "allowFinalists": True},
     16: {"key": "art-ross", "label": "Art Ross", "allowFinalists": False},
@@ -116,8 +117,11 @@ GOALIE_RATING_CURVE_LOW = 55.0
 GOALIE_RATING_CURVE_MID = 80.0
 GOALIE_RATING_CURVE_HIGH = 99.0
 GOALIE_RATING_CURVE_EXPONENT = 1.1
+SELKE_BONUS_BASE = 0.5
+SELKE_BONUS_GROWTH = 1.35
+SELKE_BONUS_CAP = 3.5
 PROJECTED_OTL = 8
 SCHEMA_VERSION = "historical-cache-v2"
-SCORING_VERSION = "historical-hybrid-70-30-v15"
+SCORING_VERSION = "historical-hybrid-70-30-v18"
 LOGO_URL_TEMPLATE = "https://assets.nhle.com/logos/nhl/svg/{abbrev}_light.svg"
 HEADSHOT_FALLBACK_TEMPLATE = "https://assets.nhle.com/mugs/nhl/{season}/{abbrev}/{player_id}.png"
