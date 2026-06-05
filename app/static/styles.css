@@ -379,6 +379,10 @@ body[data-theme="light"] .panel {
   margin-top: 18px;
 }
 
+.prompt-actions.reroll-state {
+  justify-content: center;
+}
+
 .mode-toggle-row {
   display: flex;
   align-items: center;
@@ -481,28 +485,28 @@ body[data-theme="light"] .lineup-slot.locked {
 }
 
 .slot-badge.position-c,
-.candidate-position.position-c,
+.candidate-identity-badge.position-c,
 .share-slot-pill.position-c {
   background: var(--position-c-soft);
   color: var(--position-c);
 }
 
 .slot-badge.position-w,
-.candidate-position.position-w,
+.candidate-identity-badge.position-w,
 .share-slot-pill.position-w {
   background: var(--position-w-soft);
   color: var(--position-w);
 }
 
 .slot-badge.position-d,
-.candidate-position.position-d,
+.candidate-identity-badge.position-d,
 .share-slot-pill.position-d {
   background: var(--position-d-soft);
   color: var(--position-d);
 }
 
 .slot-badge.position-g,
-.candidate-position.position-g,
+.candidate-identity-badge.position-g,
 .share-slot-pill.position-g {
   background: var(--position-g-soft);
   color: var(--position-g);
@@ -815,10 +819,135 @@ body[data-theme="light"] .share-mode-note {
   position: absolute;
   inset: 0;
   background: linear-gradient(115deg, transparent 20%, rgba(255, 255, 255, 0.18) 50%, transparent 80%);
-  animation: shuffleSweep 1100ms linear infinite;
+  animation: shuffleSweep 1600ms linear infinite;
 }
 
-.shuffle-reel,
+.shuffle-board {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.shuffle-row {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.shuffle-row-label {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(241, 247, 251, 0.64);
+}
+
+body[data-theme="light"] .shuffle-row-label {
+  color: rgba(22, 38, 53, 0.58);
+}
+
+.shuffle-ticker-window,
+.shuffle-static-row {
+  position: relative;
+  overflow: hidden;
+  min-height: 34px;
+  padding: 4px 0;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+body[data-theme="light"] .shuffle-ticker-window,
+body[data-theme="light"] .shuffle-static-row {
+  border-color: rgba(22, 38, 53, 0.08);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.shuffle-ticker-window::before,
+.shuffle-ticker-window::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 18px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.shuffle-ticker-window::before {
+  left: 0;
+  background: linear-gradient(90deg, rgba(10, 21, 32, 0.96), transparent);
+}
+
+.shuffle-ticker-window::after {
+  right: 0;
+  background: linear-gradient(270deg, rgba(10, 21, 32, 0.96), transparent);
+}
+
+body[data-theme="light"] .shuffle-ticker-window::before {
+  background: linear-gradient(90deg, rgba(247, 251, 254, 0.98), transparent);
+}
+
+body[data-theme="light"] .shuffle-ticker-window::after {
+  background: linear-gradient(270deg, rgba(247, 251, 254, 0.98), transparent);
+}
+
+.shuffle-ticker-track {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  padding: 0 10px;
+  animation: shuffleTicker 1450ms cubic-bezier(0.18, 0.78, 0.22, 1) forwards;
+}
+
+.shuffle-ticker-track.decades {
+  animation-duration: 1350ms;
+}
+
+.shuffle-ticker-chip,
+.shuffle-static-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 54px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(82, 198, 200, 0.1);
+  border: 1px solid rgba(82, 198, 200, 0.18);
+  color: rgba(241, 247, 251, 0.94);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.shuffle-ticker-chip.decade,
+.shuffle-static-chip {
+  min-width: 66px;
+}
+
+body[data-theme="light"] .shuffle-ticker-chip,
+body[data-theme="light"] .shuffle-static-chip {
+  background: rgba(82, 198, 200, 0.12);
+  border-color: rgba(31, 140, 150, 0.16);
+  color: rgba(22, 38, 53, 0.84);
+}
+
+.shuffle-static-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-inline: 10px;
+}
+
+.shuffle-copy-block {
+  display: grid;
+  gap: 3px;
+}
+
 .team-reveal {
   display: grid;
   grid-template-columns: 72px 1fr;
@@ -826,26 +955,6 @@ body[data-theme="light"] .share-mode-note {
   align-items: center;
 }
 
-.shuffling .shuffle-reel {
-  animation: shuffleFloat 420ms ease-in-out infinite alternate;
-}
-
-.shuffle-logo-shell {
-  display: grid;
-  place-items: center;
-  width: 72px;
-  height: 72px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.06);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
-}
-
-body[data-theme="light"] .shuffle-logo-shell {
-  background: rgba(255, 255, 255, 0.78);
-  box-shadow: inset 0 0 0 1px rgba(22, 38, 53, 0.05);
-}
-
-.shuffle-logo,
 .team-logo {
   width: 72px;
   height: 72px;
@@ -856,17 +965,8 @@ body[data-theme="light"] .shuffle-logo-shell {
   box-shadow: inset 0 0 0 1px rgba(17, 39, 58, 0.08);
 }
 
-body[data-theme="light"] .shuffle-logo,
 body[data-theme="light"] .team-logo {
   background: rgba(255, 255, 255, 0.98);
-}
-
-.shuffle-logo {
-  width: 60px;
-  height: 60px;
-  border-radius: 14px;
-  padding: 7px;
-  animation: shufflePulse 420ms ease-in-out infinite alternate;
 }
 
 .shuffle-open-slots {
@@ -911,6 +1011,38 @@ body[data-theme="light"] .candidate-card {
   box-shadow: 0 10px 24px rgba(24, 52, 68, 0.1);
 }
 
+.candidate-card.position-c {
+  background: linear-gradient(135deg, rgba(86, 182, 255, 0.14), rgba(86, 182, 255, 0.03) 36%, rgba(15, 30, 40, 0.98) 100%);
+}
+
+.candidate-card.position-w {
+  background: linear-gradient(135deg, rgba(255, 184, 77, 0.14), rgba(255, 184, 77, 0.03) 36%, rgba(15, 30, 40, 0.98) 100%);
+}
+
+.candidate-card.position-d {
+  background: linear-gradient(135deg, rgba(113, 211, 138, 0.14), rgba(113, 211, 138, 0.03) 36%, rgba(15, 30, 40, 0.98) 100%);
+}
+
+.candidate-card.position-g {
+  background: linear-gradient(135deg, rgba(198, 140, 255, 0.14), rgba(198, 140, 255, 0.03) 36%, rgba(15, 30, 40, 0.98) 100%);
+}
+
+body[data-theme="light"] .candidate-card.position-c {
+  background: linear-gradient(135deg, rgba(86, 182, 255, 0.16), rgba(255, 255, 255, 0.98) 34%, rgba(255, 255, 255, 0.94) 100%);
+}
+
+body[data-theme="light"] .candidate-card.position-w {
+  background: linear-gradient(135deg, rgba(255, 184, 77, 0.16), rgba(255, 255, 255, 0.98) 34%, rgba(255, 255, 255, 0.94) 100%);
+}
+
+body[data-theme="light"] .candidate-card.position-d {
+  background: linear-gradient(135deg, rgba(113, 211, 138, 0.16), rgba(255, 255, 255, 0.98) 34%, rgba(255, 255, 255, 0.94) 100%);
+}
+
+body[data-theme="light"] .candidate-card.position-g {
+  background: linear-gradient(135deg, rgba(198, 140, 255, 0.16), rgba(255, 255, 255, 0.98) 34%, rgba(255, 255, 255, 0.94) 100%);
+}
+
 .candidate-card img {
   width: 50px;
   height: 50px;
@@ -950,88 +1082,27 @@ body[data-theme="light"] .candidate-card:hover {
 }
 
 .candidate-topline {
-  justify-content: space-between;
-}
-
-.candidate-badges {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
   justify-content: flex-end;
 }
 
-.candidate-team {
-  display: inline-block;
-  font-size: 0.58rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  color: var(--teal);
-}
-
-.candidate-position,
-.candidate-meta {
-  color: var(--ink-soft);
-  font-size: 0.72rem;
-}
-
-.candidate-tier,
-.candidate-position {
+.candidate-identity-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 24px;
-  padding: 2px 6px;
+  min-width: 40px;
+  padding: 3px 8px;
   border-radius: 999px;
   font-weight: 700;
-}
-
-.candidate-tier {
-  min-width: 44px;
-  font-size: 0.62rem;
+  font-size: 0.68rem;
   letter-spacing: 0.04em;
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.candidate-tier.tier-1 {
-  background: rgba(255, 205, 96, 0.16);
-  color: #ffd785;
-}
-
-.candidate-tier.tier-2 {
-  background: rgba(120, 218, 255, 0.14);
-  color: #9fe8ff;
-}
-
-.candidate-tier.tier-3 {
-  background: rgba(124, 236, 168, 0.14);
-  color: #8ff0b9;
-}
-
-.candidate-tier.tier-4 {
-  background: rgba(196, 176, 255, 0.14);
-  color: #ccbfff;
-}
-
-.candidate-tier.tier-5 {
-  background: rgba(157, 177, 193, 0.12);
-  color: #c2cfda;
-}
-
-.candidate-position {
-  background: rgba(82, 198, 200, 0.16);
-  color: #cfffff;
-}
-
 .candidate-card h3 {
-  margin: 2px 0;
+  margin: 2px 0 4px;
   font-size: 0.94rem;
   line-height: 1;
   color: var(--ink);
-}
-
-.candidate-meta {
-  margin: 0 0 5px;
 }
 
 .candidate-stats span {
@@ -1046,6 +1117,7 @@ body[data-theme="light"] .candidate-card:hover {
 body[data-theme="light"] .candidate-stats span,
 body[data-theme="light"] .result-stats span,
 body[data-theme="light"] .scorecard-total-chip,
+body[data-theme="light"] .scorecard-award-chip,
 body[data-theme="light"] .share-slot-stats span,
 body[data-theme="light"] .best-possible-stats span {
   background: rgba(82, 198, 200, 0.08);
@@ -1150,11 +1222,17 @@ body[data-theme="light"] .award-chip {
   color: var(--ink-soft);
 }
 
+.scorecard-summary {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 14px;
+}
+
 .scorecard-totals {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin: 8px 0 10px;
+  margin: 0;
 }
 
 .scorecard-total-chip {
@@ -1209,6 +1287,33 @@ body[data-theme="light"] .share-card {
   margin: 3px 0;
   font-size: 1.18rem;
   color: var(--ink);
+}
+
+.scorecard-awards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+}
+
+.scorecard-award-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 214, 102, 0.12);
+  border: 1px solid rgba(255, 214, 102, 0.22);
+  color: #ffe09a;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+body[data-theme="light"] .scorecard-award-chip {
+  color: #8b6520;
+  border-color: rgba(216, 171, 84, 0.2);
 }
 
 .share-brand-row {
@@ -1691,25 +1796,12 @@ body[data-theme="light"] .run-history-mode {
   }
 }
 
-@keyframes shuffleFloat {
+@keyframes shuffleTicker {
   from {
-    transform: translateY(-1px);
-    opacity: 0.88;
+    transform: translateX(0);
   }
   to {
-    transform: translateY(2px);
-    opacity: 1;
-  }
-}
-
-@keyframes shufflePulse {
-  from {
-    transform: scale(0.95);
-    opacity: 0.86;
-  }
-  to {
-    transform: scale(1.01);
-    opacity: 1;
+    transform: translateX(-34%);
   }
 }
 
@@ -1921,10 +2013,30 @@ body[data-theme="light"] .run-history-mode {
     font-size: clamp(1.3rem, 8vw, 1.8rem);
   }
 
-  .team-reveal,
-  .shuffle-reel {
+  .team-reveal {
     grid-template-columns: 60px 1fr;
     gap: 8px;
+  }
+
+  .shuffle-board {
+    gap: 7px;
+    margin-bottom: 10px;
+  }
+
+  .shuffle-row {
+    grid-template-columns: 42px 1fr;
+    gap: 8px;
+  }
+
+  .shuffle-row-label {
+    font-size: 0.6rem;
+  }
+
+  .shuffle-ticker-chip,
+  .shuffle-static-chip {
+    min-width: 48px;
+    padding: 5px 8px;
+    font-size: 0.64rem;
   }
 
   .shuffle-header {
@@ -1936,24 +2048,11 @@ body[data-theme="light"] .run-history-mode {
     font-size: 0.62rem;
   }
 
-  .shuffle-logo-shell {
-    width: 60px;
-    height: 60px;
-    border-radius: 12px;
-  }
-
-  .team-logo,
-  .shuffle-logo {
+  .team-logo {
     width: 60px;
     height: 60px;
     border-radius: 12px;
     padding: 7px;
-  }
-
-  .shuffle-logo {
-    width: 50px;
-    height: 50px;
-    padding: 6px;
   }
 
   .candidate-grid {

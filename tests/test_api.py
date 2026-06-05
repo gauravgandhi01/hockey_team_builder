@@ -362,7 +362,7 @@ def test_draw_endpoint_returns_wsh_2000s_candidates_sorted_by_games_played(tmp_p
     assert all("previewScore" not in entry for entry in body["candidates"])
     assert all("ratingTier" in entry for entry in body["candidates"])
     candidate = next(entry for entry in body["candidates"] if entry["playerId"] == 100)
-    assert candidate["offerStats"] == {"points": 219, "goals": 106}
+    assert candidate["offerStats"] == {"points": 219, "goals": 106, "assists": 113}
     assert candidate["ratingTier"] == 1
     assert candidate["awards"] == [
         {"key": "mvp", "label": "MVP", "level": "winner", "count": 2},
@@ -623,8 +623,6 @@ def test_grade_endpoint_returns_record_projection(tmp_path: Path):
     assert goalie_row["teamAbbrev"] == "WSH"
     assert goalie_row["stats"] == {
         "wins": 62,
-        "shutouts": 2,
-        "goalsAgainstAverage": goalie_row["stats"]["goalsAgainstAverage"],
         "savePercentage": goalie_row["stats"]["savePercentage"],
     }
     assert goalie_row["scorecardTotals"] == {"points": 0, "goals": 0, "assists": 0}

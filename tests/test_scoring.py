@@ -173,11 +173,10 @@ def test_defense_offer_stats_omit_toi_when_untracked():
         }
     ) == {
         "points": 100,
-        "assists": 80,
     }
 
 
-def test_center_offer_stats_include_faceoffs_and_toi_when_tracked():
+def test_forward_offer_stats_show_points_goals_assists_only():
     assert decade_offer_stats(
         {
             "eligibleSlot": "C",
@@ -192,30 +191,44 @@ def test_center_offer_stats_include_faceoffs_and_toi_when_tracked():
         }
     ) == {
         "points": 100,
-        "assists": 60,
         "goals": 40,
-        "faceoffWinPctg": 0.5849,
-        "avgTimeOnIcePerGame": 1124.459,
+        "assists": 60,
     }
 
 
-def test_center_offer_stats_omit_faceoffs_and_toi_pre_2000():
+def test_winger_offer_stats_show_points_goals_assists_only():
     assert decade_offer_stats(
         {
-            "eligibleSlot": "C",
-            "decade": "1990s",
+            "eligibleSlot": "W",
+            "decade": "2010s",
             "stats": {
                 "points": 100,
                 "assists": 60,
                 "goals": 40,
-                "faceoffWinPctg": 0.5849,
-                "avgTimeOnIcePerGame": 1124.459,
             },
         }
     ) == {
         "points": 100,
-        "assists": 60,
         "goals": 40,
+        "assists": 60,
+    }
+
+
+def test_goalie_offer_stats_show_wins_and_save_percentage_only():
+    assert decade_offer_stats(
+        {
+            "eligibleSlot": "G",
+            "decade": "2010s",
+            "stats": {
+                "wins": 44,
+                "savePercentage": 0.921,
+                "shutouts": 7,
+                "goalsAgainstAverage": 2.34,
+            },
+        }
+    ) == {
+        "wins": 44,
+        "savePercentage": 0.921,
     }
 
 

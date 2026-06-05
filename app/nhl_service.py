@@ -140,36 +140,21 @@ def parse_candidate_key(candidate_key: str) -> tuple[str, int, str] | None:
 def decade_offer_stats(candidate: dict[str, Any]) -> dict[str, Any]:
     stats = candidate["stats"]
     slot = candidate["eligibleSlot"]
-    decade_start = DECADE_START_BY_LABEL.get(candidate.get("decade"))
-    if slot == "C":
-        offer = {
-            "points": stats.get("points", 0),
-            "assists": stats.get("assists", 0),
-            "goals": stats.get("goals", 0),
-        }
-        if decade_start is not None and decade_start >= 2000:
-            if stats.get("faceoffWinPctg") is not None:
-                offer["faceoffWinPctg"] = stats.get("faceoffWinPctg")
-            if stats.get("avgTimeOnIcePerGame") is not None:
-                offer["avgTimeOnIcePerGame"] = stats.get("avgTimeOnIcePerGame")
-        return offer
-    if slot == "W":
+    if slot in {"C", "W"}:
         return {
             "points": stats.get("points", 0),
             "goals": stats.get("goals", 0),
+            "assists": stats.get("assists", 0),
         }
     if slot == "D":
         offer = {
             "points": stats.get("points", 0),
-            "assists": stats.get("assists", 0),
         }
         if stats.get("avgTimeOnIcePerGame") is not None:
             offer["avgTimeOnIcePerGame"] = stats.get("avgTimeOnIcePerGame")
         return offer
     return {
         "wins": stats.get("wins", 0),
-        "shutouts": stats.get("shutouts", 0),
-        "goalsAgainstAverage": stats.get("goalsAgainstAverage"),
         "savePercentage": stats.get("savePercentage"),
     }
 

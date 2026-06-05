@@ -2,6 +2,7 @@ const SLOT_SEQUENCE = ["C", "W", "W", "D", "D", "G"];
 const RUN_HISTORY_STORAGE_KEY = "linecraft_run_history_v1";
 const THEME_STORAGE_KEY = "linecraft_theme_v1";
 const RUN_HISTORY_LIMIT = 8;
+const CUMULATIVE_AWARD_ORDER = ["cup", "mvp", "art-ross", "rocket", "selke", "norris", "vezina"];
 const SLOT_LABELS = {
   C: "Center",
   W: "Winger",
@@ -77,6 +78,9 @@ const state = {
   candidateFilter: "ALL",
   theme: "dark",
 };
+
+const SHUFFLE_TEAM_TICKER_COUNT = 10;
+const SHUFFLE_DECADE_TICKER_COUNT = 8;
 
 const lineupBoard = document.getElementById("lineup-board");
 const promptTitle = document.getElementById("prompt-title");
@@ -291,57 +295,53 @@ function openSlotSummary() {
     .join(" • ");
 }
 
-function randomShuffleFrame() {
-  const team = SHUFFLE_TEAMS[Math.floor(Math.random() * SHUFFLE_TEAMS.length)];
+function randomShuffleTeam(excludedAbbrevs = []) {
+  const excluded = new Set(excludedAbbrevs);
+  const eligible = SHUFFLE_TEAMS.filter((team) => !excluded.has(team.abbrev));
+  const pool = eligible.length ? eligible : SHUFFLE_TEAMS;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function buildShuffleTicker(sourceValues, count, excludedValues = []) {
+  const excluded = new Set(excludedValues);
+  const ticker = [];
+  while (ticker.length < count) {
+    const next = sourceValues[Math.floor(Math.random() * sourceValues.length)];
+    if (excluded.has(next) && sourceValues.length > excluded.size) {
+      continue;
+    }
+    if (ticker[ticker.length - 1] === next && sourceValues.length > 1) {
+      continue;
+    }
+    ticker.push(next);
+  }
+  return ticker;
+}
+
+function buildShuffleDisplay({ loadingKind, previousDraw, lockDecade }) {
+  const fixedDecade = state.twentiesMode
+    ? "2020s"
+    : loadingKind === "reroll-team"
+      ? (lockDecade || previousDraw?.decade || null)
+      : null;
+  const fixedTeam = loadingKind === "reroll-decade" ? previousDraw?.historicalTeam || null : null;
+
   return {
-    ...team,
-    decade: SUPPORTED_DECADES[Math.floor(Math.random() * SUPPORTED_DECADES.length)],
+    teamTicker: buildShuffleTicker(
+      SHUFFLE_TEAMS.map((team) => team.abbrev),
+      SHUFFLE_TEAM_TICKER_COUNT,
+      fixedTeam ? [fixedTeam.abbrev] : [],
+    ),
+    decadeTicker: fixedDecade
+      ? []
+      : buildShuffleTicker(SUPPORTED_DECADES, SHUFFLE_DECADE_TICKER_COUNT),
+    fixedTeam,
+    fixedDecade,
   };
 }
 
 function isShuffleLoadingKind(kind) {
   return ["offer", "reroll-team", "reroll-decade", "reroll-draw"].includes(kind);
-}
-
-function renderShuffleFrame() {
-  if (!teamRoll || !state.shuffleFrame || !isShuffleLoadingKind(state.loadingKind)) {
-    return;
-  }
-  teamRoll.innerHTML = shuffleCardMarkup(state.shuffleFrame);
-}
-
-function startShuffleAnimation() {
-  const startedAt = window.performance.now();
-  let timeoutId = null;
-  let stopped = false;
-
-  function scheduleNextTick() {
-    if (stopped) {
-      return;
-    }
-    const elapsed = window.performance.now() - startedAt;
-    const progress = Math.min(elapsed / 1100, 1);
-    const nextDelay = Math.round(80 + progress * 130);
-    timeoutId = window.setTimeout(() => {
-      if (stopped) {
-        return;
-      }
-      state.shuffleFrame = randomShuffleFrame();
-      renderShuffleFrame();
-      scheduleNextTick();
-    }, nextDelay);
-  }
-
-  renderShuffleFrame();
-  scheduleNextTick();
-
-  return () => {
-    stopped = true;
-    if (timeoutId !== null) {
-      window.clearTimeout(timeoutId);
-    }
-    state.shuffleFrame = null;
-  };
 }
 
 async function startNewRun() {
@@ -378,10 +378,8 @@ async function requestDraw({ lockFranchiseAbbrev = null, lockDecade = null, excl
   state.loadingKind = loadingKind;
   state.error = null;
   state.currentDraw = null;
-  state.shuffleFrame = randomShuffleFrame();
+  state.shuffleFrame = buildShuffleDisplay({ loadingKind, previousDraw, lockDecade });
   render();
-
-  const stopShuffle = startShuffleAnimation();
   const effectiveLockDecade = state.twentiesMode ? "2020s" : lockDecade;
 
   try {
@@ -394,7 +392,7 @@ async function requestDraw({ lockFranchiseAbbrev = null, lockDecade = null, excl
         lockDecade: effectiveLockDecade,
         excludePairKey,
       }),
-      delay(1100),
+      delay(1450),
     ]);
     state.currentDraw = draw;
     state.hardModeLocked = true;
@@ -408,7 +406,7 @@ async function requestDraw({ lockFranchiseAbbrev = null, lockDecade = null, excl
     }
     return false;
   } finally {
-    stopShuffle();
+    state.shuffleFrame = null;
     state.loadingKind = null;
     render();
   }
@@ -638,6 +636,7 @@ function renderActionButtons() {
 
   if (promptActions) {
     promptActions.classList.toggle("start-state", showStartState);
+    promptActions.classList.toggle("reroll-state", Boolean(state.currentDraw));
   }
 
   if (state.hardMode) {
@@ -734,6 +733,11 @@ function candidateStatMarkup(candidate) {
     .map(([key, value]) => formatOfferStat(statLabelForKey(key), value))
     .map((stat) => `<span>${stat}</span>`)
     .join("");
+}
+
+function candidateIdentityBadgeMarkup(candidate) {
+  const tierText = candidate.ratingTier ? ` · T${candidate.ratingTier}` : "";
+  return `<span class="candidate-identity-badge ${positionToneClass(candidate.eligibleSlot)}">${candidate.positionCode}${tierText}</span>`;
 }
 
 function filteredCandidatesForCurrentDraw() {
@@ -835,24 +839,64 @@ function shuffleCardMarkup(frame) {
         : state.twentiesMode
           ? "Drawing 2020s lineup options"
           : "Drawing lineup options";
+  const teamTickerMarkup = frame.teamTicker
+    .map(
+      (teamAbbrev) => `
+        <span class="shuffle-ticker-chip">${teamAbbrev}</span>
+      `,
+    )
+    .join("");
+  const decadeTickerMarkup = frame.fixedDecade
+    ? `<span class="shuffle-static-chip">${frame.fixedDecade}</span>`
+    : frame.decadeTicker
+      .map(
+        (decade) => `
+          <span class="shuffle-ticker-chip decade">${decade}</span>
+        `,
+      )
+      .join("");
+  const teamRowBody = frame.fixedTeam
+    ? `<div class="shuffle-static-row"><span class="shuffle-static-chip">${frame.fixedTeam.abbrev}</span></div>`
+    : `
+      <div class="shuffle-ticker-window">
+        <div class="shuffle-ticker-track">
+          ${teamTickerMarkup}
+          ${teamTickerMarkup}
+        </div>
+      </div>
+    `;
+  const decadeRowBody = frame.fixedDecade
+    ? `<div class="shuffle-static-row">${decadeTickerMarkup}</div>`
+    : `
+      <div class="shuffle-ticker-window decades">
+        <div class="shuffle-ticker-track decades">
+          ${decadeTickerMarkup}
+          ${decadeTickerMarkup}
+        </div>
+      </div>
+    `;
   return `
     <div class="team-card shuffling compact-card">
       <div class="shuffle-header">
         <p class="team-label">${loadingLabel}</p>
         <div class="shuffle-badges">
           ${modeChipMarkup("in-draw")}
-          <span class="shuffle-chip">${frame.decade}</span>
         </div>
       </div>
-      <div class="shuffle-reel">
-        <div class="shuffle-logo-shell">
-          <img class="shuffle-logo" src="${frame.logo}" alt="${frame.name} logo">
+      <div class="shuffle-board" aria-hidden="true">
+        <div class="shuffle-row">
+          <span class="shuffle-row-label">Teams</span>
+          ${teamRowBody}
         </div>
-        <div>
-          <h3>${frame.name}</h3>
-          <p class="team-subtitle">${frame.abbrev} · Rolling through franchises and eras</p>
-          <p class="shuffle-open-slots">Open slots: ${openSlotSummary()}</p>
+        <div class="shuffle-row">
+          <span class="shuffle-row-label">Era</span>
+          ${decadeRowBody}
         </div>
+      </div>
+      <div class="shuffle-copy-block">
+        <h3>${frame.fixedTeam ? "Locking a new decade" : frame.fixedDecade ? "Scanning teams" : "Scanning franchises and eras"}</h3>
+        <p class="team-subtitle">${frame.fixedDecade ? `${frame.fixedDecade} is locked for this draw.` : "Final team and decade will lock on reveal."}</p>
+        <p class="shuffle-open-slots">Open slots: ${openSlotSummary()}</p>
       </div>
     </div>
   `;
@@ -952,14 +996,9 @@ function renderPrompt() {
         <img src="${candidate.headshot}" alt="${candidate.fullName}">
         <div class="candidate-body">
           <div class="candidate-topline">
-            <span class="candidate-team">${candidate.historicalTeamAbbrev}</span>
-            <div class="candidate-badges">
-              ${candidate.ratingTier ? `<span class="candidate-tier ${tierToneClass(candidate.ratingTier)}">Tier ${candidate.ratingTier}</span>` : ""}
-              <span class="candidate-position ${positionToneClass(candidate.eligibleSlot)}">${candidate.positionCode}</span>
-            </div>
+            ${candidateIdentityBadgeMarkup(candidate)}
           </div>
           <h3>${candidate.fullName}</h3>
-          <p class="candidate-meta">${candidate.historicalTeamName}</p>
           ${candidate.offerStats ? `<div class="candidate-stats">${candidateStatMarkup(candidate)}</div>` : ""}
           ${awardChipsMarkup(candidate.awards, "candidate-awards")}
         </div>
@@ -1055,17 +1094,65 @@ function cumulativeLineupTotals(breakdown) {
   );
 }
 
+function cumulativeLineupAwards(breakdown) {
+  const totals = new Map();
+  (breakdown || []).forEach((entry) => {
+    (entry.awards || []).forEach((award) => {
+      if (!award || award.level !== "winner") {
+        return;
+      }
+      const key = award.key || award.label;
+      const existing = totals.get(key);
+      const count = Number(award.count || 0) || 0;
+      if (existing) {
+        existing.count += count;
+        return;
+      }
+      totals.set(key, {
+        key,
+        label: award.label,
+        count,
+      });
+    });
+  });
+
+  return [...totals.values()].sort((left, right) => {
+    const leftIndex = CUMULATIVE_AWARD_ORDER.indexOf(left.key);
+    const rightIndex = CUMULATIVE_AWARD_ORDER.indexOf(right.key);
+    const normalizedLeft = leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex;
+    const normalizedRight = rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex;
+    if (normalizedLeft !== normalizedRight) {
+      return normalizedLeft - normalizedRight;
+    }
+    return left.label.localeCompare(right.label);
+  });
+}
+
 function scorecardTotalsMarkup() {
   if (!state.result) {
     return "";
   }
 
   const totals = cumulativeLineupTotals(state.result.lineupBreakdown);
+  const awards = cumulativeLineupAwards(state.result.lineupBreakdown);
   return `
-    <div class="scorecard-totals" aria-label="Cumulative lineup totals">
-      <span class="scorecard-total-chip">P ${totals.points}</span>
-      <span class="scorecard-total-chip">G ${totals.goals}</span>
-      <span class="scorecard-total-chip">A ${totals.assists}</span>
+    <div class="scorecard-summary">
+      <div class="scorecard-totals" aria-label="Cumulative lineup totals">
+        <span class="scorecard-total-chip">P ${totals.points}</span>
+        <span class="scorecard-total-chip">G ${totals.goals}</span>
+        <span class="scorecard-total-chip">A ${totals.assists}</span>
+      </div>
+      ${awards.length ? `
+        <div class="scorecard-awards" aria-label="Cumulative trophy totals">
+          ${awards
+            .map(
+              (award) => `
+                <span class="scorecard-award-chip">${award.label} ${award.count}</span>
+              `,
+            )
+            .join("")}
+        </div>
+      ` : ""}
     </div>
   `;
 }
