@@ -24,6 +24,7 @@ SUPPORTED_DECADES = [1980, 1990, 2000, 2010, 2020]
 DECADE_LABELS = {start: f"{start}s" for start in SUPPORTED_DECADES}
 DECADE_START_BY_LABEL = {label: start for start, label in DECADE_LABELS.items()}
 SKATER_TOI_TRACKING_START_SEASON = 19971998
+SKATER_FACEOFF_TRACKING_START_SEASON = 19971998
 AWARD_TROPHIES = {
     8: {"key": "mvp", "label": "MVP", "allowFinalists": True},
     17: {"key": "selke", "label": "Selke", "allowFinalists": True},
@@ -39,10 +40,12 @@ ROLE_CONFIG = {
     "C": {
         "eligible_positions": {"C"},
         "weights": {
-            "points": 0.40,
-            "assists": 0.20,
-            "goals": 0.15,
-            "shots": 0.15,
+            "points": 0.36,
+            "assists": 0.22,
+            "goals": 0.12,
+            "shots": 0.12,
+            "faceoffWinPctg": 0.08,
+            "avgTimeOnIcePerGame": 0.10,
         },
     },
     "W": {
@@ -111,7 +114,7 @@ RATING_CURVE_FLOOR_RAW = 85.0
 RATING_CURVE_LOW = 40.0
 RATING_CURVE_MID = 70.0
 RATING_CURVE_HIGH = 99.0
-RATING_CURVE_EXPONENT = 1.6
+RATING_CURVE_EXPONENT = 1.35
 GOALIE_RATING_CURVE_FLOOR_RAW = 80.0
 GOALIE_RATING_CURVE_LOW = 55.0
 GOALIE_RATING_CURVE_MID = 80.0
@@ -122,6 +125,6 @@ SELKE_BONUS_GROWTH = 1.35
 SELKE_BONUS_CAP = 3.5
 PROJECTED_OTL = 8
 SCHEMA_VERSION = "historical-cache-v2"
-SCORING_VERSION = "historical-hybrid-70-30-v18"
+SCORING_VERSION = "historical-hybrid-70-30-v20"
 LOGO_URL_TEMPLATE = "https://assets.nhle.com/logos/nhl/svg/{abbrev}_light.svg"
 HEADSHOT_FALLBACK_TEMPLATE = "https://assets.nhle.com/mugs/nhl/{season}/{abbrev}/{player_id}.png"

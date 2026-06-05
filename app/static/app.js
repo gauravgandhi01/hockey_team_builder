@@ -698,6 +698,9 @@ function formatOfferStat(label, value) {
   if (label === "SV%") {
     return `${label} ${Number(value).toFixed(3)}`;
   }
+  if (label === "FO%") {
+    return `${label} ${(Number(value) * 100).toFixed(1)}`;
+  }
   if (label === "GAA") {
     return `${label} ${Number(value).toFixed(2)}`;
   }
@@ -716,6 +719,7 @@ function statLabelForKey(key) {
     assists: "A",
     goals: "G",
     avgTimeOnIcePerGame: "TOI",
+    faceoffWinPctg: "FO%",
     wins: "W",
     shutouts: "SO",
     goalsAgainstAverage: "GAA",
@@ -978,6 +982,9 @@ function formatResultStat(key, value) {
   const label = statLabelForKey(key);
   if (key === "savePercentage") {
     return `${label}: ${Number(value).toFixed(3)}`;
+  }
+  if (key === "faceoffWinPctg") {
+    return `${label}: ${(Number(value) * 100).toFixed(1)}`;
   }
   if (key === "goalsAgainstAverage") {
     return `${label}: ${Number(value).toFixed(2)}`;

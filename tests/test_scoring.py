@@ -63,7 +63,7 @@ def test_curve_rating_spreads_top_end_and_keeps_full_scale():
     assert curve_rating(99.8, 99.8, "C") == 99.0
     assert curve_rating(85.0, 99.8, "C") == 70.0
     assert curve_rating(42.5, 99.8, "C") == 55.0
-    assert curve_rating(98.0, 99.8, "C") == 93.6
+    assert curve_rating(98.0, 99.8, "C") == 94.3
 
 
 def test_goalie_curve_softens_dropoff():
@@ -126,6 +126,15 @@ def test_role_metric_weights_do_not_include_plus_minus():
     assert "plusMinus" not in defense_weights
 
 
+def test_center_faceoffs_and_toi_are_rate_only():
+    center_total_weights = totals_metric_weights("C")
+    center_rate_weights = rate_metric_weights("C")
+    assert "faceoffWinPctg" not in center_total_weights
+    assert "avgTimeOnIcePerGame" not in center_total_weights
+    assert "faceoffWinPctg" in center_rate_weights
+    assert "avgTimeOnIcePerGame" in center_rate_weights
+
+
 def test_defense_time_on_ice_is_rate_only():
     defense_total_weights = totals_metric_weights("D")
     defense_rate_weights = rate_metric_weights("D")
@@ -140,10 +149,21 @@ def test_defense_time_on_ice_is_excluded_for_pre_2000_decades():
     assert "avgTimeOnIcePerGame" in rate_metric_weights("D", 2000)
 
 
+def test_center_faceoffs_and_toi_are_excluded_for_pre_2000_decades():
+    assert "faceoffWinPctg" not in totals_metric_weights("C", 1990)
+    assert "faceoffWinPctg" not in rate_metric_weights("C", 1990)
+    assert "avgTimeOnIcePerGame" not in totals_metric_weights("C", 1990)
+    assert "avgTimeOnIcePerGame" not in rate_metric_weights("C", 1990)
+    assert "faceoffWinPctg" not in totals_metric_weights("C", 2000)
+    assert "faceoffWinPctg" in rate_metric_weights("C", 2000)
+    assert "avgTimeOnIcePerGame" in rate_metric_weights("C", 2000)
+
+
 def test_defense_offer_stats_omit_toi_when_untracked():
     assert decade_offer_stats(
         {
             "eligibleSlot": "D",
+            "decade": "1990s",
             "stats": {
                 "points": 100,
                 "assists": 80,
@@ -154,6 +174,48 @@ def test_defense_offer_stats_omit_toi_when_untracked():
     ) == {
         "points": 100,
         "assists": 80,
+    }
+
+
+def test_center_offer_stats_include_faceoffs_and_toi_when_tracked():
+    assert decade_offer_stats(
+        {
+            "eligibleSlot": "C",
+            "decade": "2010s",
+            "stats": {
+                "points": 100,
+                "assists": 60,
+                "goals": 40,
+                "faceoffWinPctg": 0.5849,
+                "avgTimeOnIcePerGame": 1124.459,
+            },
+        }
+    ) == {
+        "points": 100,
+        "assists": 60,
+        "goals": 40,
+        "faceoffWinPctg": 0.5849,
+        "avgTimeOnIcePerGame": 1124.459,
+    }
+
+
+def test_center_offer_stats_omit_faceoffs_and_toi_pre_2000():
+    assert decade_offer_stats(
+        {
+            "eligibleSlot": "C",
+            "decade": "1990s",
+            "stats": {
+                "points": 100,
+                "assists": 60,
+                "goals": 40,
+                "faceoffWinPctg": 0.5849,
+                "avgTimeOnIcePerGame": 1124.459,
+            },
+        }
+    ) == {
+        "points": 100,
+        "assists": 60,
+        "goals": 40,
     }
 
 
@@ -192,18 +254,78 @@ def test_score_role_players_builds_hybrid_scores():
             "playerId": 1,
             "fullName": "Player One",
             "awards": [],
-            "stats": {"gamesPlayed": 100, "points": 120, "assists": 70, "goals": 40, "shots": 260},
-            "totalsMetrics": totals_metrics("C", {"gamesPlayed": 100, "points": 120, "assists": 70, "goals": 40, "shots": 260}),
-            "rateMetrics": rate_metrics("C", {"gamesPlayed": 100, "points": 120, "assists": 70, "goals": 40, "shots": 260}),
+            "stats": {
+                "gamesPlayed": 100,
+                "points": 120,
+                "assists": 70,
+                "goals": 40,
+                "shots": 260,
+                "faceoffWinPctg": 0.58,
+                "avgTimeOnIcePerGame": 1200,
+            },
+            "totalsMetrics": totals_metrics(
+                "C",
+                {
+                    "gamesPlayed": 100,
+                    "points": 120,
+                    "assists": 70,
+                    "goals": 40,
+                    "shots": 260,
+                    "faceoffWinPctg": 0.58,
+                    "avgTimeOnIcePerGame": 1200,
+                },
+            ),
+            "rateMetrics": rate_metrics(
+                "C",
+                {
+                    "gamesPlayed": 100,
+                    "points": 120,
+                    "assists": 70,
+                    "goals": 40,
+                    "shots": 260,
+                    "faceoffWinPctg": 0.58,
+                    "avgTimeOnIcePerGame": 1200,
+                },
+            ),
         },
         {
             "candidateKey": "AAA:2000s:2:C",
             "playerId": 2,
             "fullName": "Player Two",
             "awards": [],
-            "stats": {"gamesPlayed": 120, "points": 84, "assists": 42, "goals": 21, "shots": 180},
-            "totalsMetrics": totals_metrics("C", {"gamesPlayed": 120, "points": 84, "assists": 42, "goals": 21, "shots": 180}),
-            "rateMetrics": rate_metrics("C", {"gamesPlayed": 120, "points": 84, "assists": 42, "goals": 21, "shots": 180}),
+            "stats": {
+                "gamesPlayed": 120,
+                "points": 84,
+                "assists": 42,
+                "goals": 21,
+                "shots": 180,
+                "faceoffWinPctg": 0.49,
+                "avgTimeOnIcePerGame": 960,
+            },
+            "totalsMetrics": totals_metrics(
+                "C",
+                {
+                    "gamesPlayed": 120,
+                    "points": 84,
+                    "assists": 42,
+                    "goals": 21,
+                    "shots": 180,
+                    "faceoffWinPctg": 0.49,
+                    "avgTimeOnIcePerGame": 960,
+                },
+            ),
+            "rateMetrics": rate_metrics(
+                "C",
+                {
+                    "gamesPlayed": 120,
+                    "points": 84,
+                    "assists": 42,
+                    "goals": 21,
+                    "shots": 180,
+                    "faceoffWinPctg": 0.49,
+                    "avgTimeOnIcePerGame": 960,
+                },
+            ),
         },
     ]
 

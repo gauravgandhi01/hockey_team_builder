@@ -37,6 +37,7 @@ PER_GAME_METRICS = {
 }
 
 TOTALS_METRIC_EXCLUSIONS = {
+    "C": {"avgTimeOnIcePerGame", "faceoffWinPctg"},
     "D": {"avgTimeOnIcePerGame"},
     "G": {"savePercentage", "goalsAgainstAverageInverse"},
 }
@@ -44,8 +45,11 @@ TOTALS_METRIC_EXCLUSIONS = {
 
 def decade_metric_exclusions(role: str, decade_start: int | None = None) -> set[str]:
     exclusions: set[str] = set()
-    if role == "D" and decade_start is not None and decade_start < 2000:
-        exclusions.add("avgTimeOnIcePerGame")
+    if decade_start is not None and decade_start < 2000:
+        if role in {"C", "D"}:
+            exclusions.add("avgTimeOnIcePerGame")
+        if role == "C":
+            exclusions.add("faceoffWinPctg")
     return exclusions
 
 

@@ -21,6 +21,7 @@ from app.constants import (
     LOGO_URL_TEMPLATE,
     MIN_DECADE_GAMES,
     SCORING_VERSION,
+    SKATER_FACEOFF_TRACKING_START_SEASON,
     SKATER_TOI_TRACKING_START_SEASON,
     SLOT_LABELS,
     SLOT_SEQUENCE,
@@ -139,12 +140,19 @@ def parse_candidate_key(candidate_key: str) -> tuple[str, int, str] | None:
 def decade_offer_stats(candidate: dict[str, Any]) -> dict[str, Any]:
     stats = candidate["stats"]
     slot = candidate["eligibleSlot"]
+    decade_start = DECADE_START_BY_LABEL.get(candidate.get("decade"))
     if slot == "C":
-        return {
+        offer = {
             "points": stats.get("points", 0),
             "assists": stats.get("assists", 0),
             "goals": stats.get("goals", 0),
         }
+        if decade_start is not None and decade_start >= 2000:
+            if stats.get("faceoffWinPctg") is not None:
+                offer["faceoffWinPctg"] = stats.get("faceoffWinPctg")
+            if stats.get("avgTimeOnIcePerGame") is not None:
+                offer["avgTimeOnIcePerGame"] = stats.get("avgTimeOnIcePerGame")
+        return offer
     if slot == "W":
         return {
             "points": stats.get("points", 0),
@@ -651,6 +659,8 @@ class NhlApiService:
                                 "shots": 0,
                                 "avgTimeOnIcePerGameWeighted": 0.0,
                                 "avgTimeOnIcePerGameTrackedGames": 0,
+                                "faceoffWinPctgWeighted": 0.0,
+                                "faceoffWinPctgTrackedGames": 0,
                             },
                         },
                     )
@@ -665,6 +675,13 @@ class NhlApiService:
                     ):
                         aggregate["stats"]["avgTimeOnIcePerGameWeighted"] += float(avg_toi) * games_played
                         aggregate["stats"]["avgTimeOnIcePerGameTrackedGames"] += games_played
+                    faceoff_win_pctg = player.get("faceoffWinPctg")
+                    if (
+                        int(season) >= SKATER_FACEOFF_TRACKING_START_SEASON
+                        and faceoff_win_pctg not in (None, "")
+                    ):
+                        aggregate["stats"]["faceoffWinPctgWeighted"] += float(faceoff_win_pctg) * games_played
+                        aggregate["stats"]["faceoffWinPctgTrackedGames"] += games_played
 
                 for player in stats.get("goalies", []):
                     player_id = int(player["playerId"])
@@ -715,6 +732,13 @@ class NhlApiService:
                         3,
                     )
                     if aggregate["stats"]["avgTimeOnIcePerGameTrackedGames"]
+                    else None,
+                    "faceoffWinPctg": round(
+                        aggregate["stats"]["faceoffWinPctgWeighted"]
+                        / aggregate["stats"]["faceoffWinPctgTrackedGames"],
+                        6,
+                    )
+                    if aggregate["stats"]["faceoffWinPctgTrackedGames"]
                     else None,
                 }
                 candidate = {
